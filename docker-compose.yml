@@ -1,0 +1,16 @@
+services:
+  redis:
+    image: redis:7-alpine
+    # Port is not exposed to the host. Connect via the internal Docker network only.
+    # To access Redis from the host for debugging: docker exec -it <container> redis-cli
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  redis-data:

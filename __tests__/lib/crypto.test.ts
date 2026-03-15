@@ -1,0 +1,76 @@
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { decrypt, encrypt } from "../../lib/crypto";
+
+const VALID_KEY = "a".repeat(64); // 64-char hex string
+
+describe("crypto", () => {
+	beforeEach(() => {
+		process.env.ENCRYPTION_KEY = VALID_KEY;
+	});
+
+	afterEach(() => {
+		delete process.env.ENCRYPTION_KEY;
+	});
+
+	describe("encrypt", () => {
+		it("returns a colon-separated iv:authTag:ciphertext string", () => {
+			const result = encrypt("hello");
+			const parts = result.split(":");
+			expect(parts).toHaveLength(3);
+			// Each part should be non-empty base64
+			parts.forEach((p) => expect(p.length).toBeGreaterThan(0));
+		});
+
+		it("produces different ciphertexts for the same plaintext (random IV)", () => {
+			const a = encrypt("same text");
+			const b = encrypt("same text");
+			expect(a).not.toBe(b);
+		});
+
+		it("throws when ENCRYPTION_KEY is missing", () => {
+			delete process.env.ENCRYPTION_KEY;
+			expect(() => encrypt("hello")).toThrow("ENCRYPTION_KEY");
+		});
+
+		it("throws when ENCRYPTION_KEY is wrong length", () => {
+			process.env.ENCRYPTION_KEY = "tooshort";
+			expect(() => encrypt("hello")).toThrow("ENCRYPTION_KEY");
+		});
+	});
+
+	describe("decrypt", () => {
+		it("roundtrip: decrypt(encrypt(plaintext)) === plaintext", () => {
+			const plaintext = "Hello, world!";
+			expect(decrypt(encrypt(plaintext))).toBe(plaintext);
+		});
+
+		it("handles unicode and special characters", () => {
+			const text = "こんにちは 🎉 <script>alert('xss')</script>";
+			expect(decrypt(encrypt(text))).toBe(text);
+		});
+
+		it("handles large content", () => {
+			const large = "x".repeat(100_000);
+			expect(decrypt(encrypt(large))).toBe(large);
+		});
+
+		it("throws on invalid payload format (missing parts)", () => {
+			expect(() => decrypt("onlyone")).toThrow(
+				"Invalid encrypted payload format",
+			);
+		});
+
+		it("throws on invalid payload format (two parts)", () => {
+			expect(() => decrypt("part1:part2")).toThrow(
+				"Invalid encrypted payload format",
+			);
+		});
+
+		it("throws on tampered ciphertext (auth tag mismatch)", () => {
+			const encrypted = encrypt("sensitive data");
+			const [iv, authTag] = encrypted.split(":");
+			const tampered = `${iv}:${authTag}:AAAAAAAAAA==`;
+			expect(() => decrypt(tampered)).toThrow();
+		});
+	});
+});
