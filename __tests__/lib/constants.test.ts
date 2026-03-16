@@ -19,8 +19,8 @@ describe("constants", () => {
 		expect(MAX_PASTE_SIZE_LABEL).toBe("5MB");
 	});
 
-	it("DEFAULT_EXPIRY_SECONDS is 90 days", () => {
-		expect(DEFAULT_EXPIRY_SECONDS).toBe(90 * 24 * 60 * 60);
+	it("DEFAULT_EXPIRY_SECONDS is 30 days", () => {
+		expect(DEFAULT_EXPIRY_SECONDS).toBe(30 * 24 * 60 * 60);
 	});
 
 	it("ID_LENGTH is a positive integer", () => {
@@ -33,16 +33,11 @@ describe("constants", () => {
 			const labels = EXPIRY_OPTIONS.map((o) => o.label);
 			expect(labels).toContain("1 hour");
 			expect(labels).toContain("1 day");
-			expect(labels).toContain("Never");
+			expect(labels).toContain("30 days");
 		});
 
-		it("Never option has value 0", () => {
-			const never = EXPIRY_OPTIONS.find((o) => o.label === "Never");
-			expect(never?.value).toBe(0);
-		});
-
-		it("all non-never values are positive integers", () => {
-			EXPIRY_OPTIONS.filter((o) => o.label !== "Never").forEach((o) => {
+		it("all values are positive integers", () => {
+			EXPIRY_OPTIONS.forEach((o) => {
 				expect(o.value).toBeGreaterThan(0);
 				expect(Number.isInteger(o.value)).toBe(true);
 			});
