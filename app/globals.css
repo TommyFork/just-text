@@ -126,9 +126,15 @@
 	body {
 		@apply bg-background text-foreground;
 		background-image:
-			radial-gradient(ellipse 80% 45% at 50% -5%, oklch(0.32 0.1 265 / 0.55), transparent 70%),
+			radial-gradient(
+				ellipse 80% 45% at 50% -5%,
+				oklch(0.32 0.1 265 / 0.55),
+				transparent 70%
+			),
 			radial-gradient(circle, oklch(1 0 0 / 0.032) 1px, transparent 1px);
-		background-size: 100% 100%, 28px 28px;
+		background-size:
+			100% 100%,
+			28px 28px;
 	}
 	html {
 		@apply font-mono;

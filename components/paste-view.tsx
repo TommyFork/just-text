@@ -104,9 +104,7 @@ export function PasteView({ paste, highlightedHtml }: PasteViewProps) {
 			{/* Footer */}
 			<div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground/35">
 				<div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-					<span>
-						{format(new Date(paste.createdAt * 1000), "MMM d, yyyy")}
-					</span>
+					<span>{format(new Date(paste.createdAt * 1000), "MMM d, yyyy")}</span>
 					{paste.expiresAt && (
 						<span>
 							expires {format(new Date(paste.expiresAt * 1000), "MMM d, yyyy")}
