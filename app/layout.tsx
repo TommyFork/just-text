@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { JetBrains_Mono } from "next/font/google";
 import "./globals.css";
+import { Analytics } from "@vercel/analytics/next";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
@@ -43,6 +44,7 @@ export default function RootLayout({
 		<html lang="en" className={cn("dark", jetbrainsMono.variable)}>
 			<body className="font-mono antialiased">
 				<TooltipProvider>{children}</TooltipProvider>
+				<Analytics />
 			</body>
 		</html>
 	);
