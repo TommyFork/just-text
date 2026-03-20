@@ -1,6 +1,12 @@
 "use client";
 
-import { Code, Fire, MagnifyingGlass, MarkdownLogo, TextT } from "@phosphor-icons/react";
+import {
+	Code,
+	Fire,
+	MagnifyingGlass,
+	MarkdownLogo,
+	TextT,
+} from "@phosphor-icons/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -17,8 +23,8 @@ import {
 	DEFAULT_EXPIRY_VALUE,
 	EXPIRY_OPTIONS,
 	MAX_PASTE_SIZE_BYTES,
-	POPULAR_LANGUAGES,
 	type PasteFormat,
+	POPULAR_LANGUAGES,
 } from "@/lib/constants";
 import { formatBytes } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -128,8 +134,8 @@ export function PasteForm() {
 
 	// Language combobox helpers
 	const isSearching = langQuery !== null;
-	const filteredLangs = (POPULAR_LANGUAGES as readonly string[]).filter((l) =>
-		!isSearching || l.toLowerCase().includes(langQuery.toLowerCase()),
+	const filteredLangs = (POPULAR_LANGUAGES as readonly string[]).filter(
+		(l) => !isSearching || l.toLowerCase().includes(langQuery.toLowerCase()),
 	);
 
 	function selectLang(lang: string) {
@@ -300,7 +306,9 @@ export function PasteForm() {
 													}}
 													className={cn(
 														"w-full px-3 py-1.5 text-left text-xs transition-colors hover:bg-white/[0.06]",
-														lang === language ? "text-foreground" : "text-muted-foreground",
+														lang === language
+															? "text-foreground"
+															: "text-muted-foreground",
 													)}
 												>
 													{displayLang(lang)}

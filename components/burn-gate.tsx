@@ -73,8 +73,8 @@ export function BurnGate({ id }: BurnGateProps) {
 						</h2>
 						<p className="mt-2 max-w-xs text-sm leading-relaxed text-muted-foreground/60">
 							This paste will be{" "}
-							<span className="text-orange-400/80">permanently deleted</span> the
-							moment you view it. This cannot be undone.
+							<span className="text-orange-400/80">permanently deleted</span>{" "}
+							the moment you view it. This cannot be undone.
 						</p>
 					</div>
 

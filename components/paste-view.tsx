@@ -1,6 +1,12 @@
 "use client";
 
-import { DotsThree, Fire, GitFork, GithubLogo, TextT } from "@phosphor-icons/react";
+import {
+	DotsThree,
+	Fire,
+	GitFork,
+	GithubLogo,
+	TextT,
+} from "@phosphor-icons/react";
 import { format } from "date-fns";
 import ReactMarkdown from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
@@ -79,8 +85,8 @@ export function PasteView({ paste, highlightedHtml }: PasteViewProps) {
 								</Badge>
 							</TooltipTrigger>
 							<TooltipContent>
-							This paste has been permanently deleted
-						</TooltipContent>
+								This paste has been permanently deleted
+							</TooltipContent>
 						</Tooltip>
 					)}
 				</div>
