@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { JetBrains_Mono } from "next/font/google";
 import "./globals.css";
+import { GoogleAnalytics } from "@next/third-parties/google";
 import { Analytics } from "@vercel/analytics/next";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -45,6 +46,9 @@ export default function RootLayout({
 			<body className="font-mono antialiased">
 				<TooltipProvider>{children}</TooltipProvider>
 				{process.env.NODE_ENV === "production" && <Analytics />}
+				<GoogleAnalytics
+					gaId={process.env.NEXT_PUBLIC_GOOGLE_ANALYTICS_ID || ""}
+				/>
 			</body>
 		</html>
 	);
