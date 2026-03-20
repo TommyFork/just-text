@@ -6,8 +6,8 @@ import type { NextConfig } from "next";
 // For a fully strict CSP, implement nonce-based headers via Next.js middleware.
 const scriptSrc =
 	process.env.NODE_ENV === "development"
-		? "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
-		: "script-src 'self' 'unsafe-inline'";
+		? "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com"
+		: "script-src 'self' 'unsafe-inline' https://www.googletagmanager.com";
 
 const nextConfig: NextConfig = {
 	async headers() {
