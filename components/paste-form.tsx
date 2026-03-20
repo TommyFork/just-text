@@ -1,15 +1,18 @@
 "use client";
 
-import {
-	Code,
-	Fire,
-	MagnifyingGlass,
-	MarkdownLogo,
-	TextT,
-} from "@phosphor-icons/react";
+import { Code, Fire, MarkdownLogo, TextT } from "@phosphor-icons/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import {
+	Combobox,
+	ComboboxContent,
+	ComboboxEmpty,
+	ComboboxItem,
+	ComboboxList,
+	ComboboxSearch,
+	ComboboxTrigger,
+} from "@/components/ui/combobox";
 import { Kbd } from "@/components/ui/kbd";
 import {
 	Select,
@@ -88,10 +91,6 @@ export function PasteForm() {
 	const [isMac, setIsMac] = useState(false);
 	const [indicatorStyle, setIndicatorStyle] = useState<React.CSSProperties>({});
 
-	// Language combobox state
-	const [langQuery, setLangQuery] = useState<string | null>(null);
-	const langInputRef = useRef<HTMLInputElement>(null);
-
 	const tabsRef = useRef<HTMLDivElement>(null);
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -131,44 +130,6 @@ export function PasteForm() {
 	const sizeBytes = new Blob([content]).size;
 	const sizeOverLimit = sizeBytes > MAX_PASTE_SIZE_BYTES;
 	const lineCount = content ? content.split("\n").length : 0;
-
-	// Language combobox helpers
-	const isSearching = langQuery !== null;
-	const filteredLangs = (POPULAR_LANGUAGES as readonly string[]).filter(
-		(l) => !isSearching || l.toLowerCase().includes(langQuery.toLowerCase()),
-	);
-
-	function selectLang(lang: string) {
-		setLanguage(lang);
-		setLangQuery(null);
-		langInputRef.current?.blur();
-	}
-
-	function handleLangFocus() {
-		setLangQuery("");
-	}
-
-	function handleLangBlur() {
-		// Small delay so mousedown on dropdown items fires first
-		setTimeout(() => {
-			if (langQuery !== null && langQuery.trim()) {
-				setLanguage(langQuery.trim());
-			}
-			setLangQuery(null);
-		}, 100);
-	}
-
-	function handleLangKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-		if (e.key === "Escape") {
-			setLangQuery(null);
-			langInputRef.current?.blur();
-			return;
-		}
-		if (e.key === "Enter" && filteredLangs.length > 0) {
-			e.preventDefault();
-			selectLang(filteredLangs[0]);
-		}
-	}
 
 	const handleSubmit = useCallback(async () => {
 		if (!content.trim() || loading || sizeOverLimit) return;
@@ -275,53 +236,31 @@ export function PasteForm() {
 							))}
 						</div>
 
-						{/* Language combobox */}
+						{/* Language dropdown with search */}
 						{format === "code" && (
-							<div className="relative">
-								<div className="flex h-7 items-center gap-1.5 rounded-md bg-white/[0.06] px-2.5 text-xs text-muted-foreground transition-colors focus-within:bg-white/[0.09]">
-									<MagnifyingGlass size={11} className="shrink-0 opacity-50" />
-									<input
-										ref={langInputRef}
-										type="text"
-										value={isSearching ? langQuery : displayLang(language)}
-										placeholder="Search languages..."
-										onFocus={handleLangFocus}
-										onChange={(e) => setLangQuery(e.target.value)}
-										onBlur={handleLangBlur}
-										onKeyDown={handleLangKeyDown}
-										className="w-24 bg-transparent text-xs outline-none placeholder:text-muted-foreground/40"
-										spellCheck={false}
-									/>
-								</div>
-								{isSearching && (
-									<div className="absolute right-0 top-full z-50 mt-1 max-h-52 w-44 overflow-y-auto rounded-lg border border-white/[0.07] bg-card py-1 shadow-xl">
-										{filteredLangs.length > 0 ? (
-											filteredLangs.map((lang) => (
-												<button
-													key={lang}
-													type="button"
-													onMouseDown={(e) => {
-														e.preventDefault();
-														selectLang(lang);
-													}}
-													className={cn(
-														"w-full px-3 py-1.5 text-left text-xs transition-colors hover:bg-white/[0.06]",
-														lang === language
-															? "text-foreground"
-															: "text-muted-foreground",
-													)}
-												>
-													{displayLang(lang)}
-												</button>
-											))
-										) : (
-											<p className="px-3 py-2 text-xs text-muted-foreground/40">
-												Press Enter to use "{langQuery}"
-											</p>
-										)}
-									</div>
-								)}
-							</div>
+							<Combobox
+								value={displayLang(language)}
+								onValueChange={(value) => {
+									const langKey = Object.keys(LANG_DISPLAY).find(
+										(key) => LANG_DISPLAY[key] === value,
+									);
+									setLanguage(langKey || value.toLowerCase());
+								}}
+							>
+								<ComboboxTrigger className="w-32">
+									{displayLang(language)}
+								</ComboboxTrigger>
+								<ComboboxContent>
+									<ComboboxSearch placeholder="Search languages..." />
+									<ComboboxList>
+										{(POPULAR_LANGUAGES as readonly string[]).map((lang) => (
+											<ComboboxItem key={lang} value={displayLang(lang)}>
+												{displayLang(lang)}
+											</ComboboxItem>
+										))}
+									</ComboboxList>
+								</ComboboxContent>
+							</Combobox>
 						)}
 					</div>
 				</div>
