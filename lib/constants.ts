@@ -11,7 +11,7 @@ export const EXPIRY_OPTIONS = [
 	{ label: "30 days", value: 2592000 },
 ] as const;
 
-export const DEFAULT_EXPIRY_VALUE = 2592000; // 30 days
+export const DEFAULT_EXPIRY_VALUE = 604800; // 7 days
 
 export const FORMAT_OPTIONS = [
 	{ label: "Plain Text", value: "plain" },

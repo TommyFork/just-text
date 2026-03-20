@@ -34,7 +34,7 @@ export function CopyButton({
 			<button
 				onClick={handleCopy}
 				className={cn(
-					"inline-flex items-center justify-center rounded-md p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
+					"inline-flex cursor-pointer items-center justify-center rounded-full p-2 text-muted-foreground transition-colors hover:bg-white/[0.07] hover:text-foreground",
 					className,
 				)}
 				title={copied ? "Copied!" : label}
@@ -48,7 +48,7 @@ export function CopyButton({
 		<button
 			onClick={handleCopy}
 			className={cn(
-				"inline-flex items-center gap-2 rounded-md border border-border bg-card px-3 py-1.5 text-sm text-card-foreground transition-colors hover:bg-accent",
+				"inline-flex cursor-pointer items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground",
 				className,
 			)}
 		>

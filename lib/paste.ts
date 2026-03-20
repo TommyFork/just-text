@@ -91,10 +91,11 @@ export async function createPaste(input: CreatePasteInput): Promise<Paste> {
 	};
 
 	const key = pasteKey(id);
-	await redis.set(key, JSON.stringify(stored));
 
 	if (input.expirySeconds > 0) {
-		await redis.expire(key, input.expirySeconds);
+		await redis.set(key, JSON.stringify(stored), "EX", input.expirySeconds);
+	} else {
+		await redis.set(key, JSON.stringify(stored));
 	}
 
 	return {
@@ -142,21 +143,4 @@ export async function getPasteMetadata(
 	const { content: _content, ...metadata } = stored;
 
 	return metadata;
-}
-
-export async function reportPaste(id: string, reason: string): Promise<void> {
-	const redis = getRedis();
-
-	// Reject reports for pastes that don't exist
-	const exists = await redis.exists(pasteKey(id));
-	if (!exists) {
-		throw new Error("Paste not found");
-	}
-
-	const reportKey = `report:${id}`;
-	const now = Math.floor(Date.now() / 1000);
-
-	await redis.lpush(reportKey, JSON.stringify({ reason, timestamp: now }));
-	// Keep reports for 30 days for manual admin review
-	await redis.expire(reportKey, 30 * 24 * 60 * 60);
 }

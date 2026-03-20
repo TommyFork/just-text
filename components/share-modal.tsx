@@ -1,6 +1,6 @@
 "use client";
 
-import { Link, TextT } from "@phosphor-icons/react";
+import { ArrowSquareOut, Link, TextT } from "@phosphor-icons/react";
 import { format } from "date-fns";
 import { formatBytes } from "@/lib/format";
 import { CopyButton } from "./copy-button";
@@ -42,6 +42,15 @@ export function ShareModal({
 							<code className="flex-1 truncate rounded-lg border border-white/[0.07] bg-white/[0.04] px-3 py-2 text-xs text-foreground/80">
 								{styledUrl}
 							</code>
+							<a
+								href={styledUrl}
+								target="_blank"
+								rel="noopener noreferrer"
+								className="inline-flex items-center justify-center rounded-md p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+								title="Open in new tab"
+							>
+								<ArrowSquareOut size={16} />
+							</a>
 							<CopyButton text={styledUrl} label="Copy styled link" />
 						</div>
 					</div>
@@ -55,6 +64,15 @@ export function ShareModal({
 							<code className="flex-1 truncate rounded-lg border border-white/[0.07] bg-white/[0.04] px-3 py-2 text-xs text-muted-foreground/50">
 								{rawUrl}
 							</code>
+							<a
+								href={rawUrl}
+								target="_blank"
+								rel="noopener noreferrer"
+								className="inline-flex items-center justify-center rounded-md p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+								title="Open in new tab"
+							>
+								<ArrowSquareOut size={16} />
+							</a>
 							<CopyButton text={rawUrl} label="Copy raw link" />
 						</div>
 					</div>

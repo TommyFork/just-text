@@ -1,8 +1,9 @@
 import { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { BurnGate } from "@/components/burn-gate";
 import { PasteView } from "@/components/paste-view";
 import { highlightCode } from "@/lib/highlight";
-import { getPaste } from "@/lib/paste";
+import { getPaste, getPasteMetadata } from "@/lib/paste";
 
 interface PageProps {
 	params: Promise<{ id: string }>;
@@ -14,11 +15,11 @@ export async function generateMetadata({
 	const { id } = await params;
 
 	return {
-		title: `just-text — ${id}`,
-		description: "Shared text on just-text",
+		title: `textdrop.sh — ${id}`,
+		description: "Shared text on textdrop.sh",
 		openGraph: {
-			title: `just-text — ${id}`,
-			description: "Shared text on just-text",
+			title: `textdrop.sh — ${id}`,
+			description: "Shared text on textdrop.sh",
 		},
 		robots: {
 			index: false,
@@ -29,11 +30,20 @@ export async function generateMetadata({
 
 export default async function ViewPaste({ params }: PageProps) {
 	const { id } = await params;
-	const paste = await getPaste(id);
 
-	if (!paste) {
-		notFound();
+	const metadata = await getPasteMetadata(id);
+	if (!metadata) notFound();
+
+	if (metadata.burnAfterRead) {
+		return (
+			<div className="min-h-svh px-4 py-8">
+				<BurnGate id={id} />
+			</div>
+		);
 	}
+
+	const paste = await getPaste(id);
+	if (!paste) notFound();
 
 	let highlightedHtml: string | undefined;
 	if (paste.format === "code" && paste.language) {

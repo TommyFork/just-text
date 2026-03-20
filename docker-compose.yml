@@ -1,8 +1,8 @@
 services:
   redis:
     image: redis:7-alpine
-    # Port is not exposed to the host. Connect via the internal Docker network only.
-    # To access Redis from the host for debugging: docker exec -it <container> redis-cli
+    ports:
+      - "6379:6379"
     volumes:
       - redis-data:/data
     command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru

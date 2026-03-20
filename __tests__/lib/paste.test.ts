@@ -15,12 +15,7 @@ vi.mock("nanoid", () => ({
 	nanoid: vi.fn(() => "testid1234"),
 }));
 
-import {
-	createPaste,
-	getPaste,
-	getPasteMetadata,
-	reportPaste,
-} from "../../lib/paste";
+import { createPaste, getPaste, getPasteMetadata } from "../../lib/paste";
 import { getRedis } from "../../lib/redis";
 
 function makeMockRedis() {
@@ -31,8 +26,12 @@ function makeMockRedis() {
 	return {
 		store,
 		redis: {
-			set: vi.fn(async (key: string, value: string) => {
+			set: vi.fn(async (key: string, value: string, ...args: unknown[]) => {
 				store[key] = value;
+				const exIdx = (args as string[]).indexOf("EX");
+				if (exIdx >= 0) {
+					ttls[key] = args[exIdx + 1] as number;
+				}
 				return "OK";
 			}),
 			get: vi.fn(async (key: string) => store[key] ?? null),
@@ -52,20 +51,22 @@ function makeMockRedis() {
 				return lists[key].length;
 			}),
 			llen: vi.fn(async (key: string) => (lists[key] ?? []).length),
-			// Simulate the atomic Lua script used by getPaste.
-			// Handles both burn-after-read (get+delete) and normal reads (get+increment+set).
 			eval: vi.fn(async (_script: string, _numkeys: number, key: string) => {
 				const raw = store[key] ?? null;
 				if (!raw) return null;
-				const data = JSON.parse(raw);
-				if (data.burnAfterRead) {
-					delete store[key];
-					return raw;
+				try {
+					const data = JSON.parse(raw);
+					if (data.burnAfterRead) {
+						delete store[key];
+						return raw;
+					}
+					data.viewCount = (data.viewCount || 0) + 1;
+					const updated = JSON.stringify(data);
+					store[key] = updated;
+					return updated;
+				} catch {
+					return null;
 				}
-				data.viewCount = (data.viewCount || 0) + 1;
-				const updated = JSON.stringify(data);
-				store[key] = updated;
-				return updated;
 			}),
 		},
 	};
@@ -117,8 +118,10 @@ describe("paste", () => {
 				burnAfterRead: false,
 			});
 
-			expect(mockRedis.redis.expire).toHaveBeenCalledWith(
+			expect(mockRedis.redis.set).toHaveBeenCalledWith(
 				"paste:testid1234",
+				expect.any(String),
+				"EX",
 				3600,
 			);
 		});
@@ -132,6 +135,10 @@ describe("paste", () => {
 			});
 
 			expect(mockRedis.redis.expire).not.toHaveBeenCalled();
+			expect(mockRedis.redis.set).toHaveBeenCalledWith(
+				"paste:testid1234",
+				expect.any(String),
+			);
 		});
 
 		it("throws when content is empty", async () => {
@@ -178,6 +185,69 @@ describe("paste", () => {
 			const after = Math.floor(Date.now() / 1000);
 			expect(result.expiresAt).toBeGreaterThanOrEqual(before + 3600);
 			expect(result.expiresAt).toBeLessThanOrEqual(after + 3600);
+		});
+
+		it("stores language field for code format", async () => {
+			const result = await createPaste({
+				content: "const x = 1;",
+				format: "code",
+				language: "typescript",
+				expirySeconds: 0,
+				burnAfterRead: false,
+			});
+
+			expect(result.language).toBe("typescript");
+
+			const stored = JSON.parse(mockRedis.store["paste:testid1234"]);
+			expect(stored.language).toBe("typescript");
+		});
+
+		it("stores language field regardless of format", async () => {
+			const result = await createPaste({
+				content: "# Hello",
+				format: "markdown",
+				language: "typescript",
+				expirySeconds: 0,
+				burnAfterRead: false,
+			});
+
+			expect(result.language).toBe("typescript");
+		});
+
+		it("strips null bytes from content", async () => {
+			const contentWithNull = "hello\0world";
+			const result = await createPaste({
+				content: contentWithNull,
+				format: "plain",
+				expirySeconds: 0,
+				burnAfterRead: false,
+			});
+
+			expect(result.content).toBe("helloworld");
+			expect(result.content).not.toContain("\0");
+		});
+
+		it("handles content with multiple null bytes", async () => {
+			const result = await createPaste({
+				content: "\0\0test\0\0",
+				format: "plain",
+				expirySeconds: 0,
+				burnAfterRead: false,
+			});
+
+			expect(result.content).toBe("test");
+		});
+
+		it("calculates sizeBytes from original content (before null byte removal)", async () => {
+			const contentWithNull = "hello\0world";
+			const result = await createPaste({
+				content: contentWithNull,
+				format: "plain",
+				expirySeconds: 0,
+				burnAfterRead: false,
+			});
+
+			expect(result.sizeBytes).toBe(Buffer.byteLength(contentWithNull, "utf8"));
 		});
 	});
 
@@ -254,6 +324,44 @@ describe("paste", () => {
 			const second = await getPaste("burn2");
 			expect(second).toBeNull();
 		});
+
+		it("returns null for corrupt JSON in Redis", async () => {
+			mockRedis.store["paste:corrupt"] = "not valid json {{{";
+
+			const result = await getPaste("corrupt");
+			expect(result).toBeNull();
+		});
+
+		it("returns paste with undefined fields for missing data", async () => {
+			mockRedis.store["paste:malformed"] = JSON.stringify({
+				content: "enc:test",
+				format: "plain",
+			});
+
+			const result = await getPaste("malformed");
+			expect(result).not.toBeNull();
+			expect(result!.viewCount).toBe(1);
+			expect(result!.language).toBeUndefined();
+			expect(result!.burnAfterRead).toBeUndefined();
+		});
+
+		it("returns metadata with language field", async () => {
+			mockRedis.store["paste:lang1"] = JSON.stringify({
+				id: "lang1",
+				content: "enc:code",
+				format: "code",
+				language: "python",
+				createdAt: 1000,
+				expiresAt: null,
+				burnAfterRead: false,
+				viewCount: 0,
+				sizeBytes: 4,
+			});
+
+			const result = await getPaste("lang1");
+			expect(result).not.toBeNull();
+			expect(result!.language).toBe("python");
+		});
 	});
 
 	describe("getPasteMetadata", () => {
@@ -278,49 +386,6 @@ describe("paste", () => {
 			expect(result).not.toHaveProperty("content");
 			expect(result!.id).toBe("meta1");
 			expect(result!.viewCount).toBe(3);
-		});
-	});
-
-	describe("reportPaste", () => {
-		beforeEach(() => {
-			// reportPaste verifies the paste exists before accepting the report
-			mockRedis.store["paste:abc123"] = JSON.stringify({
-				id: "abc123",
-				content: "enc:test",
-				format: "plain",
-				createdAt: 1000,
-				expiresAt: null,
-				burnAfterRead: false,
-				viewCount: 0,
-				sizeBytes: 4,
-			});
-		});
-
-		it("pushes a report to Redis", async () => {
-			await reportPaste("abc123", "spam");
-			expect(mockRedis.redis.lpush).toHaveBeenCalledWith(
-				"report:abc123",
-				expect.stringContaining("spam"),
-			);
-		});
-
-		it("sets a 30-day TTL on the report key", async () => {
-			await reportPaste("abc123", "spam");
-			expect(mockRedis.redis.expire).toHaveBeenCalledWith(
-				"report:abc123",
-				30 * 24 * 60 * 60,
-			);
-		});
-
-		it("throws when paste does not exist", async () => {
-			await expect(reportPaste("nonexistent", "spam")).rejects.toThrow(
-				"Paste not found",
-			);
-		});
-
-		it("does not delete the paste regardless of report count", async () => {
-			await reportPaste("abc123", "abuse");
-			expect(mockRedis.store["paste:abc123"]).toBeDefined();
 		});
 	});
 });
