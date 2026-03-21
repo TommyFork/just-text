@@ -1,31 +1,38 @@
 import { nanoid } from "nanoid";
-import { ID_LENGTH, MAX_PASTE_SIZE_BYTES, type PasteFormat } from "./constants";
-import { decrypt, encrypt } from "./crypto";
+import { ID_LENGTH, type PasteFormat } from "./constants";
 import { getRedis } from "./redis";
+
+// Max ciphertext size: ~7MB accounts for Base64 expansion of a 5MB plaintext
+// (AES-GCM adds 16-byte auth tag; Base64 expands ~1.37x)
+const MAX_CIPHERTEXT_BYTES = 7 * 1024 * 1024;
 
 export interface Paste {
 	id: string;
-	content: string;
+	ciphertext: string; // Base64URL — client-encrypted (AES-256-GCM, includes auth tag)
+	iv: string; // Base64URL — 12-byte AES-GCM IV
 	format: PasteFormat;
 	language?: string;
 	createdAt: number;
 	expiresAt: number | null;
 	burnAfterRead: boolean;
 	viewCount: number;
-	sizeBytes: number;
+	sizeBytes: number; // plaintext byte length, measured by client before encryption
 }
 
 export interface CreatePasteInput {
-	content: string;
+	ciphertext: string;
+	iv: string;
 	format: PasteFormat;
 	language?: string;
 	expirySeconds: number;
 	burnAfterRead: boolean;
+	sizeBytes: number;
 }
 
 interface StoredPaste {
 	id: string;
-	content: string; // encrypted
+	ciphertext: string;
+	iv: string;
 	format: PasteFormat;
 	language?: string;
 	createdAt: number;
@@ -59,19 +66,13 @@ end
 `;
 
 export async function createPaste(input: CreatePasteInput): Promise<Paste> {
-	const sizeBytes = Buffer.byteLength(input.content, "utf8");
-	if (sizeBytes > MAX_PASTE_SIZE_BYTES) {
-		throw new Error(
-			`Content exceeds maximum size of ${MAX_PASTE_SIZE_BYTES} bytes`,
-		);
+	if (!input.ciphertext) {
+		throw new Error("Ciphertext cannot be empty");
 	}
 
-	if (sizeBytes === 0) {
-		throw new Error("Content cannot be empty");
+	if (input.ciphertext.length > MAX_CIPHERTEXT_BYTES) {
+		throw new Error(`Ciphertext exceeds maximum size`);
 	}
-
-	// Validate UTF-8 and strip null bytes
-	const cleanContent = input.content.replace(/\0/g, "");
 
 	const redis = getRedis();
 	const id = nanoid(ID_LENGTH);
@@ -80,14 +81,15 @@ export async function createPaste(input: CreatePasteInput): Promise<Paste> {
 
 	const stored: StoredPaste = {
 		id,
-		content: encrypt(cleanContent),
+		ciphertext: input.ciphertext,
+		iv: input.iv,
 		format: input.format,
 		language: input.language,
 		createdAt: now,
 		expiresAt,
 		burnAfterRead: input.burnAfterRead,
 		viewCount: 0,
-		sizeBytes,
+		sizeBytes: input.sizeBytes,
 	};
 
 	const key = pasteKey(id);
@@ -98,10 +100,7 @@ export async function createPaste(input: CreatePasteInput): Promise<Paste> {
 		await redis.set(key, JSON.stringify(stored));
 	}
 
-	return {
-		...stored,
-		content: cleanContent,
-	};
+	return stored;
 }
 
 export async function getPaste(id: string): Promise<Paste | null> {
@@ -111,36 +110,27 @@ export async function getPaste(id: string): Promise<Paste | null> {
 	const result = await redis.eval(LUA_GET_PASTE, 1, key);
 	if (!result) return null;
 
-	let stored: StoredPaste;
 	try {
-		stored = JSON.parse(result as string);
+		return JSON.parse(result as string) as StoredPaste;
 	} catch {
 		return null;
 	}
-
-	return {
-		...stored,
-		content: decrypt(stored.content),
-	};
 }
 
 export async function getPasteMetadata(
 	id: string,
-): Promise<Omit<Paste, "content"> | null> {
+): Promise<Omit<Paste, "ciphertext" | "iv"> | null> {
 	const redis = getRedis();
 	const key = pasteKey(id);
 
 	const raw = await redis.get(key);
 	if (!raw) return null;
 
-	let stored: StoredPaste;
 	try {
-		stored = JSON.parse(raw);
+		const stored = JSON.parse(raw) as StoredPaste;
+		const { ciphertext: _c, iv: _iv, ...metadata } = stored;
+		return metadata;
 	} catch {
 		return null;
 	}
-
-	const { content: _content, ...metadata } = stored;
-
-	return metadata;
 }

@@ -11,13 +11,19 @@ import { CopyButton } from "./copy-button";
 
 interface SharePopoverProps {
 	id: string;
+	keyB64url: string;
 	/** Render as a flat menu item (no nested popover) for use inside mobile menus */
 	mobileInline?: boolean;
 }
 
-export function SharePopover({ id, mobileInline }: SharePopoverProps) {
+export function SharePopover({
+	id,
+	keyB64url,
+	mobileInline,
+}: SharePopoverProps) {
 	const baseUrl = getBaseUrl();
-	const styledUrl = `${baseUrl}/${id}`;
+	// Hash fragment carries the decryption key — never sent to the server
+	const styledUrl = `${baseUrl}/${id}#${keyB64url}`;
 	const rawUrl = `${baseUrl}/text/${id}`;
 
 	if (mobileInline) {
@@ -86,7 +92,7 @@ export function SharePopover({ id, mobileInline }: SharePopoverProps) {
 					<div>
 						<label className="mb-1 flex items-center gap-1.5 text-xs text-muted-foreground/60">
 							<TextT size={10} />
-							Raw text
+							Raw (ciphertext)
 						</label>
 						<div className="flex items-center gap-2">
 							<code className="flex-1 truncate rounded border border-white/[0.07] bg-white/[0.04] px-2 py-1.5 text-xs text-muted-foreground/60">

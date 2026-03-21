@@ -1,118 +1,177 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { decrypt, encrypt } from "../../lib/crypto";
+import { describe, expect, it } from "vitest";
+import {
+	base64urlDecode,
+	base64urlEncode,
+	decrypt,
+	encrypt,
+	generateKey,
+	importKey,
+} from "../../lib/crypto";
 
-const VALID_KEY = "a".repeat(64); // 64-char hex string
+// Node.js 18+ exposes globalThis.crypto.subtle natively — no polyfill needed.
 
-describe("crypto", () => {
-	beforeEach(() => {
-		process.env.ENCRYPTION_KEY = VALID_KEY;
+describe("base64url helpers", () => {
+	it("roundtrips arbitrary bytes", () => {
+		const bytes = new Uint8Array([0, 1, 127, 128, 255]);
+		const encoded = base64urlEncode(bytes);
+		const decoded = base64urlDecode(encoded);
+		expect(decoded).toEqual(bytes);
 	});
 
-	afterEach(() => {
-		delete process.env.ENCRYPTION_KEY;
+	it("produces URL-safe characters (no +, /, or =)", () => {
+		// Fill with 0xFF to maximise +/= in standard base64
+		const encoded = base64urlEncode(new Uint8Array(32).fill(0xff));
+		expect(encoded).not.toMatch(/[+/=]/);
 	});
 
-	describe("encrypt", () => {
-		it("returns a colon-separated iv:authTag:ciphertext string", () => {
-			const result = encrypt("hello");
-			const parts = result.split(":");
-			expect(parts).toHaveLength(3);
-			// Each part should be non-empty base64
-			parts.forEach((p) => expect(p.length).toBeGreaterThan(0));
-		});
-
-		it("produces different ciphertexts for the same plaintext (random IV)", () => {
-			const a = encrypt("same text");
-			const b = encrypt("same text");
-			expect(a).not.toBe(b);
-		});
-
-		it("throws when ENCRYPTION_KEY is missing", () => {
-			delete process.env.ENCRYPTION_KEY;
-			expect(() => encrypt("hello")).toThrow("ENCRYPTION_KEY");
-		});
-
-		it("throws when ENCRYPTION_KEY is wrong length", () => {
-			process.env.ENCRYPTION_KEY = "tooshort";
-			expect(() => encrypt("hello")).toThrow("ENCRYPTION_KEY");
-		});
-
-		it("throws when ENCRYPTION_KEY has invalid hex characters", () => {
-			process.env.ENCRYPTION_KEY = "g".repeat(64);
-			expect(() => encrypt("hello")).toThrow("ENCRYPTION_KEY");
-		});
-
-		it("throws when ENCRYPTION_KEY is 64 chars but mixed case invalid chars", () => {
-			process.env.ENCRYPTION_KEY = "G".repeat(64);
-			expect(() => encrypt("hello")).toThrow("ENCRYPTION_KEY");
-		});
-
-		it("encrypts empty string", () => {
-			const result = encrypt("");
-			const parts = result.split(":");
-			expect(parts).toHaveLength(3);
-		});
-
-		it("encrypts content at 5MB boundary", () => {
-			const maxContent = "x".repeat(5 * 1024 * 1024);
-			const encrypted = encrypt(maxContent);
-			expect(encrypted.split(":")).toHaveLength(3);
-		});
+	it("handles empty buffer", () => {
+		const encoded = base64urlEncode(new Uint8Array(0));
+		expect(encoded).toBe("");
+		expect(base64urlDecode(encoded).byteLength).toBe(0);
 	});
 
-	describe("decrypt", () => {
-		it("roundtrip: decrypt(encrypt(plaintext)) === plaintext", () => {
-			const plaintext = "Hello, world!";
-			expect(decrypt(encrypt(plaintext))).toBe(plaintext);
-		});
+	it("accepts ArrayBuffer as well as Uint8Array", () => {
+		const arr = new Uint8Array([1, 2, 3]);
+		const fromTyped = base64urlEncode(arr);
+		const fromBuffer = base64urlEncode(arr.buffer);
+		expect(fromTyped).toBe(fromBuffer);
+	});
+});
 
-		it("handles unicode and special characters", () => {
-			const text = "こんにちは 🎉 <script>alert('xss')</script>";
-			expect(decrypt(encrypt(text))).toBe(text);
-		});
+describe("generateKey", () => {
+	it("returns a CryptoKey and a non-empty keyB64url string", async () => {
+		const { cryptoKey, keyB64url } = await generateKey();
+		expect(cryptoKey).toBeInstanceOf(CryptoKey);
+		expect(typeof keyB64url).toBe("string");
+		expect(keyB64url.length).toBeGreaterThan(0);
+	});
 
-		it("handles large content", () => {
-			const large = "x".repeat(100_000);
-			expect(decrypt(encrypt(large))).toBe(large);
-		});
+	it("produces unique keys on each call", async () => {
+		const a = await generateKey();
+		const b = await generateKey();
+		expect(a.keyB64url).not.toBe(b.keyB64url);
+	});
 
-		it("throws on invalid payload format (missing parts)", () => {
-			expect(() => decrypt("onlyone")).toThrow(
-				"Invalid encrypted payload format",
-			);
-		});
+	it("raw key decodes to exactly 32 bytes (256 bits)", async () => {
+		const { keyB64url } = await generateKey();
+		expect(base64urlDecode(keyB64url).byteLength).toBe(32);
+	});
 
-		it("throws on invalid payload format (two parts)", () => {
-			expect(() => decrypt("part1:part2")).toThrow(
-				"Invalid encrypted payload format",
-			);
-		});
+	it("key contains no URL-unsafe characters", async () => {
+		for (let i = 0; i < 5; i++) {
+			const { keyB64url } = await generateKey();
+			expect(keyB64url).not.toMatch(/[+/=]/);
+		}
+	});
+});
 
-		it("throws on tampered ciphertext (auth tag mismatch)", () => {
-			const encrypted = encrypt("sensitive data");
-			const [iv, authTag] = encrypted.split(":");
-			const tampered = `${iv}:${authTag}:AAAAAAAAAA==`;
-			expect(() => decrypt(tampered)).toThrow();
-		});
+describe("importKey", () => {
+	it("imports a key exported by generateKey", async () => {
+		const { keyB64url } = await generateKey();
+		const imported = await importKey(keyB64url);
+		expect(imported).toBeInstanceOf(CryptoKey);
+	});
 
-		it("throws on invalid base64 in ciphertext", () => {
-			const encrypted = encrypt("test");
-			const [iv, authTag] = encrypted.split(":");
-			const invalid = `${iv}:${authTag}:not!!!base64===`;
-			expect(() => decrypt(invalid)).toThrow();
-		});
+	it("throws on invalid base64url input", async () => {
+		await expect(importKey("not!!!valid")).rejects.toThrow();
+	});
 
-		it("throws on empty payload", () => {
-			expect(() => decrypt("")).toThrow("Invalid encrypted payload format");
-		});
+	it("imported key has correct algorithm", async () => {
+		const { keyB64url } = await generateKey();
+		const imported = await importKey(keyB64url);
+		// AES-256-GCM key should be 256-bit
+		expect((imported.algorithm as AesKeyAlgorithm).length).toBe(256);
+	});
+});
 
-		it("handles single character", () => {
-			expect(decrypt(encrypt("a"))).toBe("a");
-		});
+describe("encrypt", () => {
+	it("returns non-empty ciphertext and iv", async () => {
+		const { cryptoKey } = await generateKey();
+		const { ciphertext, iv } = await encrypt(cryptoKey, "hello");
+		expect(typeof ciphertext).toBe("string");
+		expect(ciphertext.length).toBeGreaterThan(0);
+		expect(typeof iv).toBe("string");
+		expect(iv.length).toBeGreaterThan(0);
+	});
 
-		it("handles newlines and tabs", () => {
-			const text = "line1\nline2\t\tindented";
-			expect(decrypt(encrypt(text))).toBe(text);
-		});
+	it("iv decodes to exactly 12 bytes", async () => {
+		const { cryptoKey } = await generateKey();
+		const { iv } = await encrypt(cryptoKey, "test");
+		expect(base64urlDecode(iv).byteLength).toBe(12);
+	});
+
+	it("ciphertext and iv contain no URL-unsafe characters", async () => {
+		const { cryptoKey } = await generateKey();
+		const { ciphertext, iv } = await encrypt(cryptoKey, "test");
+		expect(ciphertext).not.toMatch(/[+/=]/);
+		expect(iv).not.toMatch(/[+/=]/);
+	});
+
+	it("produces different ciphertexts for the same plaintext (random IV per call)", async () => {
+		const { cryptoKey } = await generateKey();
+		const a = await encrypt(cryptoKey, "same");
+		const b = await encrypt(cryptoKey, "same");
+		expect(a.ciphertext).not.toBe(b.ciphertext);
+		expect(a.iv).not.toBe(b.iv);
+	});
+
+	it("encrypts empty string", async () => {
+		const { cryptoKey } = await generateKey();
+		const { ciphertext } = await encrypt(cryptoKey, "");
+		// AES-GCM with empty plaintext still produces a 16-byte auth tag
+		expect(base64urlDecode(ciphertext).byteLength).toBe(16);
+	});
+});
+
+describe("decrypt", () => {
+	it("roundtrip: decrypt(encrypt(plaintext)) === plaintext", async () => {
+		const { cryptoKey } = await generateKey();
+		const { ciphertext, iv } = await encrypt(cryptoKey, "Hello, world!");
+		const result = await decrypt(cryptoKey, ciphertext, iv);
+		expect(result).toBe("Hello, world!");
+	});
+
+	it("handles unicode and emoji", async () => {
+		const { cryptoKey } = await generateKey();
+		const text = "こんにちは 🎉 <script>alert('xss')</script>";
+		const { ciphertext, iv } = await encrypt(cryptoKey, text);
+		expect(await decrypt(cryptoKey, ciphertext, iv)).toBe(text);
+	});
+
+	it("handles newlines and tabs", async () => {
+		const { cryptoKey } = await generateKey();
+		const text = "line1\nline2\t\tindented";
+		const { ciphertext, iv } = await encrypt(cryptoKey, text);
+		expect(await decrypt(cryptoKey, ciphertext, iv)).toBe(text);
+	});
+
+	it("handles large content (~100KB)", async () => {
+		const { cryptoKey } = await generateKey();
+		const large = "x".repeat(100_000);
+		const { ciphertext, iv } = await encrypt(cryptoKey, large);
+		expect(await decrypt(cryptoKey, ciphertext, iv)).toBe(large);
+	});
+
+	it("throws when decrypting with a different key", async () => {
+		const { cryptoKey: k1 } = await generateKey();
+		const { cryptoKey: k2 } = await generateKey();
+		const { ciphertext, iv } = await encrypt(k1, "secret");
+		await expect(decrypt(k2, ciphertext, iv)).rejects.toThrow();
+	});
+
+	it("throws on tampered ciphertext (auth tag fails)", async () => {
+		const { cryptoKey } = await generateKey();
+		const { ciphertext, iv } = await encrypt(cryptoKey, "data");
+		// Corrupt the last few characters of the Base64URL ciphertext
+		const tampered = ciphertext.slice(0, -4) + "AAAA";
+		await expect(decrypt(cryptoKey, tampered, iv)).rejects.toThrow();
+	});
+
+	it("throws on wrong iv", async () => {
+		const { cryptoKey } = await generateKey();
+		const { ciphertext } = await encrypt(cryptoKey, "data");
+		// Use a different random iv
+		const wrongIv = base64urlEncode(crypto.getRandomValues(new Uint8Array(12)));
+		await expect(decrypt(cryptoKey, ciphertext, wrongIv)).rejects.toThrow();
 	});
 });

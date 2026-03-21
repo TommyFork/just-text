@@ -8,9 +8,10 @@ const COPY_FEEDBACK_DURATION_MS = 2000;
 
 interface CopyButtonProps {
 	text: string;
-	label?: string;
+	label?: React.ReactNode;
 	className?: string;
 	variant?: "icon" | "full";
+	title?: string;
 }
 
 export function CopyButton({
@@ -18,6 +19,7 @@ export function CopyButton({
 	label = "Copy",
 	className,
 	variant = "icon",
+	title,
 }: CopyButtonProps) {
 	const [copied, setCopied] = useState(false);
 	const timeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -43,6 +45,10 @@ export function CopyButton({
 		}
 	}
 
+	const ariaLabel = copied
+		? "Copied!"
+		: (title ?? (typeof label === "string" ? label : "Copy"));
+
 	if (variant === "icon") {
 		return (
 			<button
@@ -51,8 +57,8 @@ export function CopyButton({
 					"inline-flex cursor-pointer items-center justify-center rounded-full p-2 text-muted-foreground transition-colors hover:bg-white/[0.07] hover:text-foreground",
 					className,
 				)}
-				title={copied ? "Copied!" : label}
-				aria-label={copied ? "Copied!" : label}
+				title={ariaLabel}
+				aria-label={ariaLabel}
 			>
 				{copied ? <Check size={16} weight="bold" /> : <Copy size={16} />}
 			</button>
@@ -66,7 +72,8 @@ export function CopyButton({
 				"inline-flex cursor-pointer items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground",
 				className,
 			)}
-			aria-label={copied ? "Copied!" : label}
+			aria-label={ariaLabel}
+			title={title}
 		>
 			{copied ? (
 				<>
