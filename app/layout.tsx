@@ -7,52 +7,53 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 const jetbrainsMono = JetBrains_Mono({
-  subsets: ["latin"],
-  variable: "--font-mono",
+	subsets: ["latin"],
+	variable: "--font-mono",
 });
 
 export const metadata: Metadata = {
-  title: "textdrop.sh — Share text. Nothing else.",
-  description:
-    "Paste text, get a link. Up to 5MB. Syntax highlighting, markdown rendering, raw text access. No account needed.",
-  metadataBase: new URL(
-    process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000",
-  ),
-  openGraph: {
-    title: "textdrop.sh — Share text. Nothing else.",
-    description:
-      "Paste text, get a link. Up to 5MB. Syntax highlighting, markdown rendering, raw text access. No account needed.",
-    type: "website",
-    siteName: "textdrop.sh",
-  },
-  twitter: {
-    card: "summary",
-    title: "textdrop.sh",
-    description: "Share text. Nothing else.",
-  },
-  robots: {
-    index: true,
-    follow: true,
-  },
+	title: "textdrop.sh — Share text. Nothing else.",
+	description:
+		"Paste text, get a link. Up to 5MB. Syntax highlighting, markdown rendering, raw text access. No account needed.",
+	metadataBase: new URL(
+		process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000",
+	),
+	openGraph: {
+		title: "textdrop.sh — Share text. Nothing else.",
+		description:
+			"Paste text, get a link. Up to 5MB. Syntax highlighting, markdown rendering, raw text access. No account needed.",
+		type: "website",
+		siteName: "textdrop.sh",
+	},
+	twitter: {
+		card: "summary",
+		title: "textdrop.sh",
+		description: "Share text. Nothing else.",
+	},
+	robots: {
+		index: true,
+		follow: true,
+	},
 };
 
 export default function RootLayout({
-  children,
+	children,
 }: Readonly<{
-  children: React.ReactNode;
+	children: React.ReactNode;
 }>) {
-  return (
-    <html lang="en" className={cn("dark", jetbrainsMono.variable)}>
-      <TooltipProvider>{children}</TooltipProvider>
-      {process.env.NODE_ENV === "production" && (
-        <>
-          <Analytics />
-          <GoogleAnalytics
-            gaId={process.env.NEXT_PUBLIC_GOOGLE_ANALYTICS_ID || ""}
-          />
-        </>
-      )}
-      <body className="font-mono antialiased">{children}</body>
-    </html>
-  );
+	return (
+		<html lang="en" className={cn("dark", jetbrainsMono.variable)}>
+			<body className="font-mono antialiased">
+				<TooltipProvider>{children}</TooltipProvider>
+				{process.env.NODE_ENV === "production" && (
+					<>
+						<Analytics />
+						<GoogleAnalytics
+							gaId={process.env.NEXT_PUBLIC_GOOGLE_ANALYTICS_ID || ""}
+						/>
+					</>
+				)}
+			</body>
+		</html>
+	);
 }
