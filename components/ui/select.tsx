@@ -50,7 +50,7 @@ function SelectTrigger({
 		>
 			{children}
 			<SelectPrimitive.Icon asChild>
-				<CaretDownIcon className="pointer-events-none size-4 text-muted-foreground" />
+				<CaretDownIcon className="size-3.5 shrink-0 opacity-50" />
 			</SelectPrimitive.Icon>
 		</SelectPrimitive.Trigger>
 	);

@@ -1,13 +1,8 @@
 "use client";
 
-import {
-	DotsThree,
-	Fire,
-	GitFork,
-	GithubLogo,
-	TextT,
-} from "@phosphor-icons/react";
+import { DotsThree, Fire, GitFork, TextT } from "@phosphor-icons/react";
 import { format } from "date-fns";
+import { useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
@@ -55,6 +50,8 @@ function forkPaste(paste: PasteViewProps["paste"]) {
 
 export function PasteView({ paste, highlightedHtml }: PasteViewProps) {
 	const rawUrl = `/text/${paste.id}`;
+	const remarkPlugins = useMemo(() => [remarkGfm], []);
+	const rehypePlugins = useMemo(() => [rehypeSanitize], []);
 
 	const lines = paste.content.split("\n");
 	const lineCount = lines.length;
@@ -109,7 +106,7 @@ export function PasteView({ paste, highlightedHtml }: PasteViewProps) {
 						<button
 							type="button"
 							onClick={() => forkPaste(paste)}
-							className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.04] px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+							className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.04] px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
 							title="Fork this paste"
 						>
 							<GitFork size={13} />
@@ -167,39 +164,91 @@ export function PasteView({ paste, highlightedHtml }: PasteViewProps) {
 			{/* Content window */}
 			<div className="overflow-hidden rounded-xl border border-white/[0.07] bg-card shadow-[0_0_0_1px_oklch(1_0_0/0.03),0_32px_64px_-16px_oklch(0_0_0/0.7)]">
 				{paste.format === "code" && highlightedHtml ? (
-					<div
-						className="overflow-x-auto p-5 text-sm leading-relaxed [&_pre]:!bg-transparent [&_code]:!bg-transparent"
-						dangerouslySetInnerHTML={{ __html: highlightedHtml }}
-					/>
+					<div className="overflow-x-auto">
+						<div className="py-5 pl-5 text-sm" style={{ lineHeight: "1.5" }}>
+							<div
+								className="shiki-content"
+								dangerouslySetInnerHTML={{ __html: highlightedHtml }}
+							/>
+						</div>
+					</div>
 				) : paste.format === "markdown" ? (
-					<div className="prose prose-invert prose-headings:font-semibold prose-pre:rounded-lg prose-pre:bg-white/[0.03] prose-pre:border prose-pre:border-white/[0.07] prose-pre:shadow-lg prose-code:text-[0.875em] prose-code:bg-white/[0.05] prose-code:px-[0.35em] prose-code:py-[0.15em] prose-code:rounded prose-code:before:content-none prose-code:after:content-none [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:rounded-none prose-a:text-blue-400 prose-a:no-underline hover:prose-a:underline prose-strong:text-foreground prose-blockquote:border-l-orange-500/50 prose-blockquote:text-muted-foreground prose-hr:border-white/[0.07] max-w-none p-6">
+					<div className="prose prose-invert max-w-none p-4 sm:p-6 text-[0.9375rem] sm:text-[0.9375rem] leading-[1.65] prose-headings:font-semibold prose-headings:tracking-tight prose-h1:text-[1.3em] prose-h2:text-[1.15em] prose-h3:text-[1.05em] prose-p:leading-[1.65] prose-a:text-blue-400 prose-a:font-normal prose-a:no-underline prose-strong:text-foreground/90 prose-em:text-foreground/80 prose-code:text-[0.85em] prose-code:font-mono prose-code:font-normal prose-code:bg-white/[0.09] prose-code:px-[0.4em] prose-code:py-[0.18em] prose-code:rounded-md prose-code:text-sky-300/80 prose-code:before:content-none prose-code:after:content-none prose-pre:rounded-xl prose-pre:bg-[oklch(0.13_0_0)] prose-pre:border prose-pre:border-white/[0.07] prose-pre:overflow-x-auto prose-pre:my-4 prose-pre:mx-0 prose-blockquote:border-l-[3px] prose-blockquote:border-primary/60 prose-blockquote:bg-primary/[0.04] prose-blockquote:rounded-r-lg prose-blockquote:py-0.5 prose-blockquote:px-5 prose-blockquote:my-4 prose-blockquote:text-muted-foreground/80 prose-hr:border-white/[0.07] prose-hr:my-6 prose-table:text-sm prose-table:w-full prose-thead:border-b prose-thead:border-white/[0.1] prose-th:py-2 prose-th:px-3 prose-th:font-medium prose-th:text-muted-foreground/60 prose-td:py-2 prose-td:px-3 prose-tr:border-b prose-tr:border-white/[0.05] prose-img:rounded-xl prose-img:border prose-img:border-white/[0.07] prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5 [&_a:hover]:underline [&_pre_code]:block [&_pre_code]:bg-transparent [&_pre_code]:px-4 [&_pre_code]:py-3.5 [&_pre_code]:leading-relaxed [&_pre_code]:text-foreground/80 [&_pre_code]:text-[0.8125rem] [&_blockquote_p]:my-2 [&_h2]:border-b [&_h2]:border-white/[0.07] [&_h2]:pb-2 [&_thead]:bg-white/[0.03] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
 						<ReactMarkdown
-							remarkPlugins={[remarkGfm]}
-							rehypePlugins={[rehypeSanitize]}
+							remarkPlugins={remarkPlugins}
+							rehypePlugins={rehypePlugins}
+							components={{
+								pre({ children }) {
+									const child = Array.isArray(children)
+										? children[0]
+										: children;
+									const text =
+										typeof (
+											child as {
+												props?: { children?: unknown };
+											}
+										)?.props?.children === "string"
+											? (child as { props: { children: string } }).props
+													.children
+											: "";
+									return (
+										<div className="group relative">
+											<pre>{children}</pre>
+											<div className="absolute right-2.5 top-2.5 opacity-0 transition-opacity group-hover:opacity-100">
+												<CopyButton
+													text={text}
+													variant="icon"
+													className="size-7 bg-white/[0.07] hover:bg-white/[0.12]"
+												/>
+											</div>
+										</div>
+									);
+								},
+								a({ href, children }) {
+									return (
+										<a href={href} target="_blank" rel="noopener noreferrer">
+											{children}
+										</a>
+									);
+								},
+								table({ children }) {
+									return (
+										<div className="my-4 overflow-x-auto rounded-lg border border-white/[0.07]">
+											<table className="w-full border-collapse">
+												{children}
+											</table>
+										</div>
+									);
+								},
+							}}
 						>
 							{paste.content}
 						</ReactMarkdown>
 					</div>
 				) : (
 					<div className="overflow-x-auto">
-						<div className="flex py-5 text-sm leading-relaxed">
+						<div
+							className="flex items-start gap-4 py-5 pl-5 text-sm"
+							style={{ lineHeight: "1.5" }}
+						>
 							{/* Gutter */}
 							<div
-								className="select-none shrink-0 border-r border-white/[0.05] pr-4 text-right font-mono text-muted-foreground/20"
+								className="select-none shrink-0 text-right font-mono text-muted-foreground/20"
 								style={{
-									paddingLeft: "1.25rem",
-									minWidth: `${gutterWidth + 3}ch`,
+									minWidth: `${gutterWidth}ch`,
 								}}
 								aria-hidden="true"
 							>
 								{lines.map((_, i) => (
-									<div key={i}>{i + 1}</div>
+									<div key={i} style={{ lineHeight: "inherit" }}>
+										{i + 1}
+									</div>
 								))}
 							</div>
 							{/* Content */}
 							<pre
-								className="px-5 text-foreground/90"
-								style={{ whiteSpace: "pre" }}
+								className="text-foreground/90"
+								style={{ whiteSpace: "pre", lineHeight: "inherit" }}
 							>
 								{paste.content}
 							</pre>
@@ -222,15 +271,6 @@ export function PasteView({ paste, highlightedHtml }: PasteViewProps) {
 						{lineCount} {lineCount === 1 ? "line" : "lines"}
 					</span>
 				</div>
-				<a
-					href="https://github.com/TommyFork/textdrop.sh"
-					target="_blank"
-					rel="noopener noreferrer"
-					className="inline-flex items-center gap-1 text-xs text-muted-foreground/50 transition-colors hover:text-foreground/70"
-				>
-					<GithubLogo size={14} />
-					GitHub
-				</a>
 			</div>
 		</div>
 	);

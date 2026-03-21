@@ -121,7 +121,12 @@
 	* {
 		@apply border-border outline-ring/50;
 		scrollbar-width: thin;
-		scrollbar-color: oklch(1 0 0 / 12%) transparent;
+		scrollbar-color: oklch(1 0 0 / 15%) transparent;
+	}
+
+	html {
+		scrollbar-width: thin;
+		scrollbar-color: oklch(1 0 0 / 15%) transparent;
 	}
 	body {
 		@apply bg-background text-foreground;
@@ -140,23 +145,105 @@
 		@apply font-mono;
 	}
 
-	::-webkit-scrollbar {
-		width: 5px;
-		height: 5px;
-	}
-	::-webkit-scrollbar-track {
-		background: transparent;
-	}
-	::-webkit-scrollbar-thumb {
-		background: oklch(1 0 0 / 12%);
-		border-radius: 99px;
-	}
-	::-webkit-scrollbar-thumb:hover {
-		background: oklch(1 0 0 / 22%);
-	}
-
 	::selection {
 		background-color: oklch(0.65 0.2 265 / 55%);
 		color: oklch(0.985 0 0);
 	}
+}
+
+/* Scrollbar styles - outside @layer for Safari support */
+::-webkit-scrollbar {
+	width: 4px;
+	height: 4px;
+}
+::-webkit-scrollbar-track {
+	background: transparent;
+}
+::-webkit-scrollbar-thumb {
+	background: oklch(1 0 0 / 15%);
+	border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover {
+	background: oklch(1 0 0 / 25%);
+}
+
+/* Force scrollbar styling on overflow containers */
+.overflow-x-auto::-webkit-scrollbar,
+.overflow-y-auto::-webkit-scrollbar,
+[class*="overflow-"]::-webkit-scrollbar,
+*::-webkit-scrollbar {
+	width: 4px !important;
+	height: 4px !important;
+}
+.overflow-x-auto::-webkit-scrollbar-track,
+.overflow-y-auto::-webkit-scrollbar-track,
+[class*="overflow-"]::-webkit-scrollbar-track,
+*::-webkit-scrollbar-track {
+	background: transparent !important;
+}
+.overflow-x-auto::-webkit-scrollbar-thumb,
+.overflow-y-auto::-webkit-scrollbar-thumb,
+[class*="overflow-"]::-webkit-scrollbar-thumb,
+*::-webkit-scrollbar-thumb {
+	background: oklch(1 0 0 / 15%) !important;
+	border-radius: 99px !important;
+}
+.overflow-x-auto::-webkit-scrollbar-thumb:hover,
+.overflow-y-auto::-webkit-scrollbar-thumb:hover,
+[class*="overflow-"]::-webkit-scrollbar-thumb:hover,
+*::-webkit-scrollbar-thumb:hover {
+	background: oklch(1 0 0 / 25%) !important;
+}
+
+/* Safari specific: ensure containers allow scrollbar styling */
+.overflow-x-auto,
+.overflow-y-auto,
+[class*="overflow-"] {
+	scrollbar-width: thin !important;
+	scrollbar-color: oklch(1 0 0 / 15%) transparent !important;
+}
+
+/* Ultra-specific override for paste view */
+div[class*="overflow-x"]::-webkit-scrollbar,
+div[style*="overflow-x"]::-webkit-scrollbar,
+div[class*="overflow-y"]::-webkit-scrollbar,
+div[style*="overflow-y"]::-webkit-scrollbar {
+	width: 4px !important;
+	height: 4px !important;
+	background: transparent !important;
+}
+div[class*="overflow-x"]::-webkit-scrollbar-thumb,
+div[style*="overflow-x"]::-webkit-scrollbar-thumb,
+div[class*="overflow-y"]::-webkit-scrollbar-thumb,
+div[style*="overflow-y"]::-webkit-scrollbar-thumb {
+	background: oklch(1 0 0 / 15%) !important;
+	border-radius: 99px !important;
+}
+
+/* Shiki syntax-highlighted code block with line numbers */
+.shiki-content .shiki-pre {
+	background: transparent !important;
+	margin: 0;
+	padding: 0;
+	font-family: inherit;
+	font-size: inherit;
+}
+
+.shiki-content .shiki-pre code {
+	background: transparent !important;
+}
+
+.shiki-content .shiki-line {
+	display: block;
+	white-space: pre;
+}
+
+.shiki-content .shiki-ln {
+	display: inline-block;
+	text-align: right;
+	min-width: var(--gutter-width, 2ch);
+	margin-right: 1rem;
+	color: oklch(0.62 0 0 / 0.2);
+	user-select: none;
+	pointer-events: none;
 }

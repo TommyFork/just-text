@@ -6,6 +6,7 @@ import {
 	PopoverContent,
 	PopoverTrigger,
 } from "@/components/ui/popover";
+import { getBaseUrl } from "@/lib/utils";
 import { CopyButton } from "./copy-button";
 
 interface SharePopoverProps {
@@ -15,7 +16,7 @@ interface SharePopoverProps {
 }
 
 export function SharePopover({ id, mobileInline }: SharePopoverProps) {
-	const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
+	const baseUrl = getBaseUrl();
 	const styledUrl = `${baseUrl}/${id}`;
 	const rawUrl = `${baseUrl}/text/${id}`;
 
@@ -53,7 +54,7 @@ export function SharePopover({ id, mobileInline }: SharePopoverProps) {
 			<PopoverTrigger asChild>
 				<button
 					type="button"
-					className="inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-white/[0.07] hover:text-foreground"
+					className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-white/[0.07] hover:text-foreground"
 				>
 					<Link size={14} />
 					Share

@@ -1,10 +1,14 @@
-import { createHighlighter, type Highlighter } from "shiki";
+import {
+	type BundledLanguage,
+	createHighlighter,
+	type Highlighter,
+} from "shiki";
 
-let highlighter: Highlighter | null = null;
+let highlighterPromise: Promise<Highlighter> | null = null;
 
 export async function getHighlighter(): Promise<Highlighter> {
-	if (!highlighter) {
-		highlighter = await createHighlighter({
+	if (!highlighterPromise) {
+		highlighterPromise = createHighlighter({
 			themes: ["tokyo-night"],
 			langs: [
 				"typescript",
@@ -33,7 +37,21 @@ export async function getHighlighter(): Promise<Highlighter> {
 			],
 		});
 	}
-	return highlighter;
+	return highlighterPromise;
+}
+
+function buildTokenStyle(token: {
+	color?: string;
+	fontStyle?: number;
+}): string {
+	const styles: string[] = [];
+	if (token.color) styles.push(`color:${token.color}`);
+	const fs = token.fontStyle as number;
+	if (fs & 1) styles.push("font-style:italic");
+	if (fs & 2) styles.push("font-weight:bold");
+	if (fs & 4) styles.push("text-decoration:underline");
+	if (fs & 8) styles.push("text-decoration:line-through");
+	return styles.join(";");
 }
 
 export async function highlightCode(
@@ -42,10 +60,22 @@ export async function highlightCode(
 ): Promise<string> {
 	const hl = await getHighlighter();
 	const langs = hl.getLoadedLanguages();
-	const lang = langs.includes(language) ? language : "plaintext";
+	const lang = (
+		langs.includes(language) ? language : "plaintext"
+	) as BundledLanguage;
 
-	return hl.codeToHtml(code, {
-		lang,
-		theme: "tokyo-night",
+	const tokensResult = hl.codeToTokens(code, { lang, theme: "tokyo-night" });
+	const gutterWidth = String(tokensResult.tokens.length).length;
+
+	const lines = tokensResult.tokens.map((lineTokens, index) => {
+		const tokensHtml = lineTokens
+			.map((token) => {
+				const style = buildTokenStyle(token);
+				return `<span${style ? ` style="${style}"` : ""}>${token.content}</span>`;
+			})
+			.join("");
+		return `<span class="shiki-line"><span class="shiki-ln">${index + 1}</span>${tokensHtml}</span>`;
 	});
+
+	return `<pre class="shiki-pre" style="color:${tokensResult.fg};--gutter-width:${gutterWidth}ch" tabindex="0"><code>${lines.join("")}</code></pre>`;
 }
