@@ -312,7 +312,9 @@ export function PasteForm() {
 			<div className="mt-3 flex flex-wrap items-center gap-2 sm:flex-nowrap">
 				{/* Expiry picker */}
 				<Combobox
-					value={EXPIRY_OPTIONS.find((o) => o.value === expirySeconds)?.label ?? ""}
+					value={
+						EXPIRY_OPTIONS.find((o) => o.value === expirySeconds)?.label ?? ""
+					}
 					onValueChange={(label) => {
 						const opt = EXPIRY_OPTIONS.find((o) => o.label === label);
 						if (opt) setExpirySeconds(opt.value);

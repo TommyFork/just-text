@@ -167,10 +167,28 @@ export function PasteView({ paste, highlightedHtml }: PasteViewProps) {
 			{/* Content window */}
 			<div className="overflow-hidden rounded-xl border border-white/[0.07] bg-card shadow-[0_0_0_1px_oklch(1_0_0/0.03),0_32px_64px_-16px_oklch(0_0_0/0.7)]">
 				{paste.format === "code" && highlightedHtml ? (
-					<div
-						className="overflow-x-auto p-5 text-sm leading-relaxed [&_pre]:!bg-transparent [&_code]:!bg-transparent"
-						dangerouslySetInnerHTML={{ __html: highlightedHtml }}
-					/>
+					<div className="overflow-x-auto">
+						<div className="flex py-5 text-sm leading-relaxed">
+							{/* Gutter */}
+							<div
+								className="select-none shrink-0 border-r border-white/[0.05] pr-4 text-right font-mono text-muted-foreground/20"
+								style={{
+									paddingLeft: "1.25rem",
+									minWidth: `${gutterWidth + 3}ch`,
+								}}
+								aria-hidden="true"
+							>
+								{lines.map((_, i) => (
+									<div key={i}>{i + 1}</div>
+								))}
+							</div>
+							{/* Highlighted code */}
+							<div
+								className="shiki-content px-5"
+								dangerouslySetInnerHTML={{ __html: highlightedHtml }}
+							/>
+						</div>
+					</div>
 				) : paste.format === "markdown" ? (
 					<div className="prose prose-invert prose-headings:font-semibold prose-pre:rounded-lg prose-pre:bg-white/[0.03] prose-pre:border prose-pre:border-white/[0.07] prose-pre:shadow-lg prose-code:text-[0.875em] prose-code:bg-white/[0.05] prose-code:px-[0.35em] prose-code:py-[0.15em] prose-code:rounded prose-code:before:content-none prose-code:after:content-none [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:rounded-none prose-a:text-blue-400 prose-a:no-underline hover:prose-a:underline prose-strong:text-foreground prose-blockquote:border-l-orange-500/50 prose-blockquote:text-muted-foreground prose-hr:border-white/[0.07] max-w-none p-6">
 						<ReactMarkdown
