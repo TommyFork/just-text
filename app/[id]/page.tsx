@@ -36,7 +36,7 @@ export default async function ViewPaste({ params }: PageProps) {
 
 	if (metadata.burnAfterRead) {
 		return (
-			<div className="min-h-svh px-4 py-8">
+			<div className="min-h-svh px-4 py-4 md:py-8">
 				<BurnGate id={id} />
 			</div>
 		);
@@ -55,7 +55,7 @@ export default async function ViewPaste({ params }: PageProps) {
 	}
 
 	return (
-		<div className="min-h-svh px-4 py-8">
+		<div className="min-h-svh px-4 py-4 md:py-8">
 			<PasteView paste={paste} highlightedHtml={highlightedHtml} />
 		</div>
 	);

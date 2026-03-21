@@ -46,3 +46,33 @@ export const POPULAR_LANGUAGES = [
 	"markdown",
 	"plaintext",
 ] as const;
+
+export const LANGUAGE_DISPLAY_MAP: Record<string, string> = {
+	typescript: "TypeScript",
+	javascript: "JavaScript",
+	python: "Python",
+	rust: "Rust",
+	go: "Go",
+	java: "Java",
+	c: "C",
+	cpp: "C++",
+	csharp: "C#",
+	ruby: "Ruby",
+	php: "PHP",
+	swift: "Swift",
+	kotlin: "Kotlin",
+	sql: "SQL",
+	html: "HTML",
+	css: "CSS",
+	json: "JSON",
+	yaml: "YAML",
+	toml: "TOML",
+	bash: "Bash",
+	dockerfile: "Dockerfile",
+	markdown: "Markdown",
+	plaintext: "Plain Text",
+};
+
+export function getLanguageDisplayName(lang: string): string {
+	return LANGUAGE_DISPLAY_MAP[lang] ?? lang;
+}

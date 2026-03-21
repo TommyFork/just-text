@@ -1,8 +1,8 @@
 "use client";
 
 import { ArrowSquareOut, Link, TextT } from "@phosphor-icons/react";
-import { format } from "date-fns";
 import { formatBytes } from "@/lib/format";
+import { formatDate, getBaseUrl } from "@/lib/utils";
 import { CopyButton } from "./copy-button";
 
 interface ShareModalProps {
@@ -18,7 +18,7 @@ export function ShareModal({
 	sizeBytes,
 	onCreateAnother,
 }: ShareModalProps) {
-	const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? window.location.origin;
+	const baseUrl = getBaseUrl();
 	const styledUrl = `${baseUrl}/${id}`;
 	const rawUrl = `${baseUrl}/text/${id}`;
 
@@ -80,9 +80,7 @@ export function ShareModal({
 
 				<div className="mt-4 flex items-center justify-between text-xs text-muted-foreground/35">
 					<span>
-						{expiresAt
-							? `expires ${format(new Date(expiresAt * 1000), "MMM d, yyyy")}`
-							: "never expires"}
+						{expiresAt ? `expires ${formatDate(expiresAt)}` : "never expires"}
 					</span>
 					<span>{formatBytes(sizeBytes)}</span>
 				</div>

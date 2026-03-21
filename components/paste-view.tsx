@@ -7,7 +7,8 @@ import {
 	GithubLogo,
 	TextT,
 } from "@phosphor-icons/react";
-import { format } from "date-fns";
+import { useRouter } from "next/navigation";
+import { useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
@@ -23,6 +24,7 @@ import {
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { formatBytes } from "@/lib/format";
+import { formatDate } from "@/lib/utils";
 import { CopyButton } from "./copy-button";
 import { SharePopover } from "./share-popover";
 
@@ -41,45 +43,60 @@ interface PasteViewProps {
 	highlightedHtml?: string;
 }
 
-function forkPaste(paste: PasteViewProps["paste"]) {
-	sessionStorage.setItem(
-		"textdrop_fork",
-		JSON.stringify({
-			content: paste.content,
-			format: paste.format,
-			language: paste.language,
-		}),
-	);
-	window.location.href = "/";
+function forkPaste(
+	paste: PasteViewProps["paste"],
+	router: ReturnType<typeof useRouter>,
+) {
+	try {
+		sessionStorage.setItem(
+			"textdrop_fork",
+			JSON.stringify({
+				content: paste.content,
+				format: paste.format,
+				language: paste.language,
+			}),
+		);
+		router.push("/");
+	} catch {
+		// Session storage not available (private browsing, etc.)
+		router.push("/");
+	}
 }
 
 export function PasteView({ paste, highlightedHtml }: PasteViewProps) {
+	const router = useRouter();
 	const rawUrl = `/text/${paste.id}`;
 
-	const lines = paste.content.split("\n");
-	const lineCount = lines.length;
-	const gutterWidth = String(lineCount).length;
+	const { lines, lineCount, gutterWidth } = useMemo(() => {
+		const lines = paste.content.split("\n");
+		const lineCount = lines.length;
+		const gutterWidth = String(lineCount).length;
+		return { lines, lineCount, gutterWidth };
+	}, [paste.content]);
+
+	const remarkPlugins = useMemo(() => [remarkGfm], []);
+	const rehypePlugins = useMemo(() => [rehypeSanitize], []);
 
 	return (
 		<div className="mx-auto w-full max-w-4xl">
 			{/* Toolbar */}
 			<div className="mb-3 flex items-center justify-between gap-2">
-				<div className="flex items-center gap-3">
+				<div className="flex min-w-0 items-center gap-2">
 					<a
 						href="/"
-						className="text-sm font-bold tracking-tighter transition-colors hover:opacity-70 bg-gradient-to-b from-foreground to-foreground/60 bg-clip-text text-transparent"
+						className="shrink-0 text-sm font-bold tracking-tighter transition-colors hover:opacity-70 bg-gradient-to-b from-foreground to-foreground/60 bg-clip-text text-transparent"
 					>
 						textdrop.sh
 					</a>
 					{paste.format === "code" && paste.language && (
-						<Badge variant="secondary" className="text-xs">
+						<Badge variant="secondary" className="shrink-0 text-xs">
 							{paste.language}
 						</Badge>
 					)}
 					{paste.burnAfterRead && (
 						<Tooltip>
 							<TooltipTrigger asChild>
-								<Badge className="cursor-default border-orange-500/40 bg-orange-500/10 text-orange-400">
+								<Badge className="shrink-0 cursor-default border-orange-500/40 bg-orange-500/10 text-orange-400">
 									<Fire size={11} weight="fill" />
 									<span className="ml-1">burned</span>
 								</Badge>
@@ -108,7 +125,7 @@ export function PasteView({ paste, highlightedHtml }: PasteViewProps) {
 					{!paste.burnAfterRead && (
 						<button
 							type="button"
-							onClick={() => forkPaste(paste)}
+							onClick={() => forkPaste(paste, router)}
 							className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.04] px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
 							title="Fork this paste"
 						>
@@ -120,7 +137,7 @@ export function PasteView({ paste, highlightedHtml }: PasteViewProps) {
 				</div>
 
 				{/* Mobile actions */}
-				<div className="flex items-center gap-2 sm:hidden">
+				<div className="flex shrink-0 items-center gap-2 sm:hidden">
 					<CopyButton text={paste.content} label="Copy" variant="full" />
 					{!paste.burnAfterRead && (
 						<Popover>
@@ -150,7 +167,7 @@ export function PasteView({ paste, highlightedHtml }: PasteViewProps) {
 									</a>
 									<button
 										type="button"
-										onClick={() => forkPaste(paste)}
+										onClick={() => forkPaste(paste, router)}
 										className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-muted-foreground transition-colors hover:bg-white/[0.06] hover:text-foreground"
 									>
 										<GitFork size={14} />
@@ -167,15 +184,72 @@ export function PasteView({ paste, highlightedHtml }: PasteViewProps) {
 			{/* Content window */}
 			<div className="overflow-hidden rounded-xl border border-white/[0.07] bg-card shadow-[0_0_0_1px_oklch(1_0_0/0.03),0_32px_64px_-16px_oklch(0_0_0/0.7)]">
 				{paste.format === "code" && highlightedHtml ? (
-					<div
-						className="overflow-x-auto p-5 text-sm leading-relaxed [&_pre]:!bg-transparent [&_code]:!bg-transparent"
-						dangerouslySetInnerHTML={{ __html: highlightedHtml }}
-					/>
+					<>
+						{/* Language header bar */}
+						<div className="flex items-center justify-between border-b border-white/[0.06] bg-white/[0.015] px-4 py-2.5">
+							{paste.language && (
+								<span className="font-mono text-xs text-muted-foreground/50">
+									{paste.language}
+								</span>
+							)}
+							<span className="tabular-nums text-xs text-muted-foreground/30">
+								{lineCount} {lineCount === 1 ? "line" : "lines"}
+							</span>
+						</div>
+						<div
+							className="shiki-wrapper"
+							dangerouslySetInnerHTML={{ __html: highlightedHtml }}
+						/>
+					</>
 				) : paste.format === "markdown" ? (
-					<div className="prose prose-invert prose-headings:font-semibold prose-pre:rounded-lg prose-pre:bg-white/[0.03] prose-pre:border prose-pre:border-white/[0.07] prose-pre:shadow-lg prose-code:text-[0.875em] prose-code:bg-white/[0.05] prose-code:px-[0.35em] prose-code:py-[0.15em] prose-code:rounded prose-code:before:content-none prose-code:after:content-none [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:rounded-none prose-a:text-blue-400 prose-a:no-underline hover:prose-a:underline prose-strong:text-foreground prose-blockquote:border-l-orange-500/50 prose-blockquote:text-muted-foreground prose-hr:border-white/[0.07] max-w-none p-6">
+					<div className="prose prose-sm prose-invert max-w-none p-4 sm:prose-base sm:p-7 prose-headings:font-semibold prose-headings:tracking-tight prose-h1:text-[1.5em] prose-h2:text-[1.2em] prose-h3:text-[1.05em] prose-p:leading-[1.8] prose-a:text-blue-400 prose-a:font-normal prose-a:no-underline prose-strong:text-foreground/90 prose-em:text-foreground/80 prose-code:text-[0.82em] prose-code:font-mono prose-code:font-normal prose-code:bg-white/[0.09] prose-code:px-[0.4em] prose-code:py-[0.18em] prose-code:rounded-md prose-code:text-sky-300/80 prose-code:before:content-none prose-code:after:content-none prose-pre:rounded-xl prose-pre:bg-[oklch(0.13_0_0)] prose-pre:border prose-pre:border-white/[0.07] prose-pre:shadow-[0_8px_32px_-8px_oklch(0_0_0/0.5)] prose-pre:overflow-x-auto prose-pre:my-4 prose-blockquote:border-l-[3px] prose-blockquote:border-primary/60 prose-blockquote:bg-primary/[0.04] prose-blockquote:rounded-r-lg prose-blockquote:py-0.5 prose-blockquote:px-5 prose-blockquote:my-4 prose-blockquote:text-muted-foreground/80 prose-hr:border-white/[0.07] prose-hr:my-6 prose-table:text-sm prose-table:w-full prose-thead:border-b prose-thead:border-white/[0.1] prose-th:py-2 prose-th:px-3 prose-th:font-medium prose-th:text-muted-foreground/60 prose-td:py-2 prose-td:px-3 prose-tr:border-b prose-tr:border-white/[0.05] prose-img:rounded-xl prose-img:border prose-img:border-white/[0.07] prose-ul:my-3 prose-ol:my-3 prose-li:my-1 [&_a:hover]:underline [&_pre_code]:block [&_pre_code]:bg-transparent [&_pre_code]:px-4 [&_pre_code]:py-3.5 [&_pre_code]:leading-relaxed [&_pre_code]:text-foreground/80 [&_blockquote_p]:my-2 [&_h2]:border-b [&_h2]:border-white/[0.07] [&_h2]:pb-2 [&_thead]:bg-white/[0.03] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
 						<ReactMarkdown
-							remarkPlugins={[remarkGfm]}
-							rehypePlugins={[rehypeSanitize]}
+							remarkPlugins={remarkPlugins}
+							rehypePlugins={rehypePlugins}
+							components={{
+								pre({ children }) {
+									const child = Array.isArray(children)
+										? children[0]
+										: children;
+									const text =
+										typeof (
+											child as {
+												props?: { children?: unknown };
+											}
+										)?.props?.children === "string"
+											? (child as { props: { children: string } }).props
+													.children
+											: "";
+									return (
+										<div className="group relative">
+											<pre>{children}</pre>
+											<div className="absolute right-2.5 top-2.5 opacity-0 transition-opacity group-hover:opacity-100">
+												<CopyButton
+													text={text}
+													variant="icon"
+													className="size-7 bg-white/[0.07] hover:bg-white/[0.12]"
+												/>
+											</div>
+										</div>
+									);
+								},
+								a({ href, children }) {
+									return (
+										<a href={href} target="_blank" rel="noopener noreferrer">
+											{children}
+										</a>
+									);
+								},
+								table({ children }) {
+									return (
+										<div className="my-4 overflow-x-auto rounded-lg border border-white/[0.07]">
+											<table className="w-full border-collapse">
+												{children}
+											</table>
+										</div>
+									);
+								},
+							}}
 						>
 							{paste.content}
 						</ReactMarkdown>
@@ -209,28 +283,24 @@ export function PasteView({ paste, highlightedHtml }: PasteViewProps) {
 			</div>
 
 			{/* Footer */}
-			<div className="relative mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground/35">
-				<div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-					<span>{format(new Date(paste.createdAt * 1000), "MMM d, yyyy")}</span>
+			<div className="relative mt-4 text-center text-xs text-muted-foreground/35">
+				<p>
+					{formatDate(paste.createdAt)}
 					{paste.expiresAt && (
-						<span>
-							expires {format(new Date(paste.expiresAt * 1000), "MMM d, yyyy")}
-						</span>
-					)}
-					<span>{formatBytes(paste.sizeBytes)}</span>
-					<span>
-						{lineCount} {lineCount === 1 ? "line" : "lines"}
-					</span>
-				</div>
-				<a
-					href="https://github.com/TommyFork/textdrop.sh"
-					target="_blank"
-					rel="noopener noreferrer"
-					className="inline-flex items-center gap-1 text-xs text-muted-foreground/50 transition-colors hover:text-foreground/70"
-				>
-					<GithubLogo size={14} />
-					GitHub
-				</a>
+						<> &middot; expires {formatDate(paste.expiresAt)}</>
+					)}{" "}
+					&middot; {formatBytes(paste.sizeBytes)} &middot; {lineCount}{" "}
+					{lineCount === 1 ? "line" : "lines"} &middot;{" "}
+					<a
+						href="https://github.com/TommyFork/textdrop.sh"
+						target="_blank"
+						rel="noopener noreferrer"
+						className="inline-flex items-center gap-1 transition-colors hover:text-foreground/70"
+					>
+						<GithubLogo size={14} />
+						GitHub
+					</a>
+				</p>
 			</div>
 		</div>
 	);

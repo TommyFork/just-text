@@ -12,20 +12,31 @@ export async function checkRateLimit(
 	windowSeconds: number,
 ): Promise<RateLimitResult> {
 	const redis = getRedis();
-	const now = Math.floor(Date.now() / 1000);
-	const windowKey = `ratelimit:${key}:${Math.floor(now / windowSeconds)}`;
+	const now = Date.now();
+	const windowMs = windowSeconds * 1000;
 
-	const pipeline = redis.pipeline();
-	pipeline.incr(windowKey);
-	pipeline.expire(windowKey, windowSeconds);
-	const results = await pipeline.exec();
+	// Use sliding window: count requests in the last windowMs milliseconds
+	const windowStart = now - windowMs;
+	const rateLimitKey = `ratelimit:${key}`;
 
-	const count = (results?.[0]?.[1] as number) ?? 0;
-	const resetAt = (Math.floor(now / windowSeconds) + 1) * windowSeconds;
+	// Remove old entries outside the window
+	await redis.zremrangebyscore(rateLimitKey, 0, windowStart);
+
+	// Count current requests in window
+	const currentCount = await redis.zcard(rateLimitKey);
+
+	// Add current request
+	await redis.zadd(rateLimitKey, now, `${now}:${Math.random()}`);
+
+	// Set expiry on the key (cleanup)
+	await redis.pexpire(rateLimitKey, windowMs);
+
+	const newCount = currentCount + 1;
+	const resetAt = Math.floor((now + windowMs) / 1000);
 
 	return {
-		allowed: count <= maxRequests,
-		remaining: Math.max(0, maxRequests - count),
+		allowed: newCount <= maxRequests,
+		remaining: Math.max(0, maxRequests - newCount),
 		resetAt,
 	};
 }

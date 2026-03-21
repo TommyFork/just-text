@@ -15,6 +15,18 @@ export function getRedis(): Redis {
 				return Math.min(times * 200, 2000);
 			},
 		});
+
+		// Handle graceful shutdown
+		const handleShutdown = () => {
+			if (redis) {
+				redis.disconnect();
+				redis = null;
+			}
+		};
+
+		process.on("beforeExit", handleShutdown);
+		process.on("SIGTERM", handleShutdown);
+		process.on("SIGINT", handleShutdown);
 	}
 	return redis;
 }
