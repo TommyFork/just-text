@@ -44,9 +44,11 @@ export async function GET(
 
 		return NextResponse.json(paste, {
 			headers: {
+				// Ciphertext is opaque — safe to cache publicly.
+				// burn-after-read pastes must never be cached (consumed on first read).
 				"Cache-Control": paste.burnAfterRead
 					? "private, no-store"
-					: "public, max-age=60",
+					: "public, max-age=300",
 			},
 		});
 	} catch (error) {

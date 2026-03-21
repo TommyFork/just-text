@@ -1,53 +1,92 @@
-import { createCipheriv, createDecipheriv, randomBytes } from "crypto";
+// Client-side Zero-Knowledge crypto using the Web Crypto API.
+// Works in browser, Web Workers, and Node.js 18+ (globalThis.crypto.subtle).
+// The server NEVER imports this file — encryption/decryption is client-only.
 
-const ALGORITHM = "aes-256-gcm";
-const IV_LENGTH = 16;
-const _AUTH_TAG_LENGTH = 16;
+// ── Base64URL helpers (RFC 4648 §5, no padding) ───────────────────────────────
+// Standard btoa uses +/= which breaks URL parsing. Base64URL uses -_ instead.
 
-function getKey(): Buffer {
-	const hex = process.env.ENCRYPTION_KEY;
-	if (!hex || hex.length !== 64 || !/^[0-9a-fA-F]{64}$/.test(hex)) {
-		throw new Error(
-			"ENCRYPTION_KEY must be a 64-character hex string (32 bytes). Generate with: openssl rand -hex 32",
-		);
+export function base64urlEncode(buf: ArrayBuffer | Uint8Array): string {
+	const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+	let binary = "";
+	for (let i = 0; i < bytes.byteLength; i++) {
+		binary += String.fromCharCode(bytes[i]);
 	}
-	return Buffer.from(hex, "hex");
+	return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
 }
 
-export function encrypt(plaintext: string): string {
-	const key = getKey();
-	const iv = randomBytes(IV_LENGTH);
-	const cipher = createCipheriv(ALGORITHM, key, iv);
-
-	let encrypted = cipher.update(plaintext, "utf8");
-	encrypted = Buffer.concat([encrypted, cipher.final()]);
-	const authTag = cipher.getAuthTag();
-
-	// Format: iv:authTag:ciphertext (all base64)
-	return [
-		iv.toString("base64"),
-		authTag.toString("base64"),
-		encrypted.toString("base64"),
-	].join(":");
+export function base64urlDecode(s: string): Uint8Array<ArrayBuffer> {
+	// Restore standard base64 padding
+	const padded = s.replace(/-/g, "+").replace(/_/g, "/");
+	const padLen = (4 - (padded.length % 4)) % 4;
+	const base64 = padded + "=".repeat(padLen);
+	const binary = atob(base64);
+	const bytes = new Uint8Array(binary.length) as Uint8Array<ArrayBuffer>;
+	for (let i = 0; i < binary.length; i++) {
+		bytes[i] = binary.charCodeAt(i);
+	}
+	return bytes;
 }
 
-export function decrypt(payload: string): string {
-	const key = getKey();
-	const [ivB64, authTagB64, ciphertextB64] = payload.split(":");
+// ── Key generation ─────────────────────────────────────────────────────────────
 
-	if (!ivB64 || !authTagB64 || !ciphertextB64) {
-		throw new Error("Invalid encrypted payload format");
-	}
+export async function generateKey(): Promise<{
+	cryptoKey: CryptoKey;
+	keyB64url: string;
+}> {
+	const cryptoKey = await crypto.subtle.generateKey(
+		{ name: "AES-GCM", length: 256 },
+		true, // extractable — we need to export it for the URL hash
+		["encrypt", "decrypt"],
+	);
+	const raw = await crypto.subtle.exportKey("raw", cryptoKey);
+	return { cryptoKey, keyB64url: base64urlEncode(raw) };
+}
 
-	const iv = Buffer.from(ivB64, "base64");
-	const authTag = Buffer.from(authTagB64, "base64");
-	const ciphertext = Buffer.from(ciphertextB64, "base64");
+// ── Import a Base64URL key string back into a CryptoKey ───────────────────────
 
-	const decipher = createDecipheriv(ALGORITHM, key, iv);
-	decipher.setAuthTag(authTag);
+export async function importKey(keyB64url: string): Promise<CryptoKey> {
+	const raw = base64urlDecode(keyB64url);
+	return crypto.subtle.importKey("raw", raw, { name: "AES-GCM" }, false, [
+		"decrypt",
+	]);
+}
 
-	let decrypted = decipher.update(ciphertext);
-	decrypted = Buffer.concat([decrypted, decipher.final()]);
+// ── Encryption ─────────────────────────────────────────────────────────────────
+// Returns Base64URL-encoded ciphertext (SubtleCrypto appends the 16-byte GCM
+// auth tag at the end of the buffer automatically) and a 12-byte Base64URL IV.
 
-	return decrypted.toString("utf8");
+export async function encrypt(
+	key: CryptoKey,
+	plaintext: string,
+): Promise<{ ciphertext: string; iv: string }> {
+	const iv = crypto.getRandomValues(new Uint8Array(12)); // 12 bytes = NIST recommendation
+	const encoded = new TextEncoder().encode(plaintext);
+	const ciphertextBuf = await crypto.subtle.encrypt(
+		{ name: "AES-GCM", iv },
+		key,
+		encoded,
+	);
+	return {
+		ciphertext: base64urlEncode(ciphertextBuf),
+		iv: base64urlEncode(iv),
+	};
+}
+
+// ── Decryption ─────────────────────────────────────────────────────────────────
+// Throws DOMException("OperationError") if the auth tag doesn't match
+// (tampered ciphertext, wrong key, or wrong IV).
+
+export async function decrypt(
+	key: CryptoKey,
+	ciphertext: string,
+	iv: string,
+): Promise<string> {
+	const ciphertextBytes = base64urlDecode(ciphertext);
+	const ivBytes = base64urlDecode(iv);
+	const plaintextBuf = await crypto.subtle.decrypt(
+		{ name: "AES-GCM", iv: ivBytes },
+		key,
+		ciphertextBytes,
+	);
+	return new TextDecoder().decode(plaintextBuf);
 }

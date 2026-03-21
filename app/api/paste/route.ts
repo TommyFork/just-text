@@ -10,31 +10,44 @@ import { type CreatePasteInput, createPaste } from "@/lib/paste";
 import { checkPasteRateLimit } from "@/lib/rate-limit";
 import { getBaseUrl } from "@/lib/utils";
 
+// ~7MB: accounts for Base64URL expansion (~1.37x) of a 5MB plaintext + 16-byte GCM tag
+const MAX_CIPHERTEXT_LENGTH = 7 * 1024 * 1024;
+
 function isValidPasteBody(body: unknown): body is {
-	content: string;
+	ciphertext: string;
+	iv: string;
 	format: PasteFormat;
 	language?: string;
 	expirySeconds: number;
 	burnAfterRead?: boolean;
+	sizeBytes: number;
 } {
-	if (typeof body !== "object" || body === null) {
-		return false;
-	}
+	if (typeof body !== "object" || body === null) return false;
 
 	const b = body as Record<string, unknown>;
 
-	// Validate content
-	if (typeof b.content !== "string" || b.content.length === 0) {
+	if (typeof b.ciphertext !== "string" || b.ciphertext.length === 0) {
 		return false;
 	}
 
-	// Validate format
+	if (typeof b.iv !== "string" || b.iv.length === 0) {
+		return false;
+	}
+
+	// iv must decode to exactly 12 bytes (AES-GCM NIST recommendation)
+	try {
+		const ivPadded = b.iv.replace(/-/g, "+").replace(/_/g, "/");
+		const decoded = atob(
+			ivPadded + "=".repeat((4 - (ivPadded.length % 4)) % 4),
+		);
+		if (decoded.length !== 12) return false;
+	} catch {
+		return false;
+	}
+
 	const validFormats = FORMAT_OPTIONS.map((f) => f.value);
-	if (!validFormats.includes(b.format as PasteFormat)) {
-		return false;
-	}
+	if (!validFormats.includes(b.format as PasteFormat)) return false;
 
-	// Validate expiry
 	const validExpiries = EXPIRY_OPTIONS.map((e) => e.value);
 	if (
 		typeof b.expirySeconds !== "number" ||
@@ -43,11 +56,16 @@ function isValidPasteBody(body: unknown): body is {
 		return false;
 	}
 
-	// Validate language if provided and format is code
 	if (b.format === "code" && b.language !== undefined) {
-		if (typeof b.language !== "string") {
-			return false;
-		}
+		if (typeof b.language !== "string") return false;
+	}
+
+	if (
+		typeof b.sizeBytes !== "number" ||
+		b.sizeBytes < 0 ||
+		b.sizeBytes > MAX_PASTE_SIZE_BYTES
+	) {
+		return false;
 	}
 
 	return true;
@@ -87,25 +105,28 @@ export async function POST(request: NextRequest) {
 			);
 		}
 
-		// Additional validation: content size
-		if (Buffer.byteLength(body.content, "utf8") > MAX_PASTE_SIZE_BYTES) {
+		if (body.ciphertext.length > MAX_CIPHERTEXT_LENGTH) {
 			return NextResponse.json(
-				{ error: `Content exceeds maximum size of 5MB` },
+				{ error: "Content exceeds maximum size of 5MB" },
 				{ status: 400 },
 			);
 		}
 
 		const input: CreatePasteInput = {
-			content: body.content,
+			ciphertext: body.ciphertext,
+			iv: body.iv,
 			format: body.format,
 			language: body.format === "code" ? body.language : undefined,
 			expirySeconds: body.expirySeconds,
 			burnAfterRead: Boolean(body.burnAfterRead),
+			sizeBytes: body.sizeBytes,
 		};
 
 		const paste = await createPaste(input);
 		const baseUrl = getBaseUrl(request.url);
 
+		// Note: the hash fragment (#KEY) is appended client-side — the server
+		// never knows the encryption key.
 		return NextResponse.json(
 			{
 				id: paste.id,
