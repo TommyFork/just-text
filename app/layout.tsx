@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import { JetBrains_Mono } from "next/font/google";
 import "./globals.css";
-import { GoogleAnalytics } from "@next/third-parties/google";
 import { Analytics } from "@vercel/analytics/next";
 import { headers } from "next/headers";
+import { GoogleAnalyticsSafe } from "@/components/google-analytics-safe";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
@@ -42,9 +42,9 @@ export default async function RootLayout({
 }: Readonly<{
 	children: React.ReactNode;
 }>) {
-	// Nonce is injected by proxy.ts for the per-request CSP
+	// Nonce is injected by proxy.ts for the per-request CSP.
+	// Passed to GoogleAnalyticsSafe so its inline init script is whitelisted.
 	const nonce = (await headers()).get("x-nonce") ?? undefined;
-	void nonce; // Available for future use with nonce-compatible script components
 
 	return (
 		<html lang="en" className={cn("dark", jetbrainsMono.variable)}>
@@ -53,8 +53,9 @@ export default async function RootLayout({
 				{process.env.NODE_ENV === "production" && (
 					<>
 						<Analytics />
-						<GoogleAnalytics
+						<GoogleAnalyticsSafe
 							gaId={process.env.NEXT_PUBLIC_GOOGLE_ANALYTICS_ID ?? ""}
+							nonce={nonce}
 						/>
 					</>
 				)}
