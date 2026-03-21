@@ -16,7 +16,12 @@ export function proxy(request: NextRequest) {
 	const csp = [
 		"default-src 'self'",
 		// Nonce replaces 'unsafe-inline'; allowlist GA tag manager explicitly
-		`script-src 'self' 'nonce-${nonce}' https://www.googletagmanager.com${isPreview ? " https://vercel.live 'unsafe-inline'" : ""}`,
+		// On preview deployments Vercel injects a toolbar with an inline bootstrap
+		// script. We allow only that specific script by its sha256 hash rather than
+		// 'unsafe-inline', so arbitrary inline scripts remain blocked even on preview.
+		// If Vercel updates the toolbar the hash changes and the toolbar silently
+		// breaks (CSP violation in console) — not a security issue, just cosmetic.
+		`script-src 'self' 'nonce-${nonce}' https://www.googletagmanager.com${isPreview ? " https://vercel.live 'sha256-swwZR+NXg32d7EaRirit+Gzs3edtfXLd8ejkuL2DzYM='" : ""}`,
 		// Tailwind inline styles and Shiki's style injections still require this
 		"style-src 'self' 'unsafe-inline'",
 		"img-src 'self' data:",

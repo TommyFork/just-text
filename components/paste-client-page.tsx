@@ -23,7 +23,13 @@ type PageState =
 	| { status: "loading" }
 	| { status: "no-key" }
 	| { status: "decrypting"; paste: PasteData }
-	| { status: "done"; paste: PasteData; html: string; plaintext: string }
+	| {
+			status: "done";
+			paste: PasteData;
+			html: string;
+			plaintext: string;
+			keyB64url: string;
+	  }
 	| { status: "error"; message: string };
 
 export function PasteClientPage({ id }: { id: string }) {
@@ -55,7 +61,13 @@ export function PasteClientPage({ id }: { id: string }) {
 				// Shouldn't normally happen (server routes burn-after-read to BurnGate),
 				// but gracefully handle it if it does.
 				if (!cancelled)
-					setState({ status: "done", paste, html: "", plaintext: "" });
+					setState({
+						status: "done",
+						paste,
+						html: "",
+						plaintext: "",
+						keyB64url,
+					});
 				return;
 			}
 
@@ -69,11 +81,16 @@ export function PasteClientPage({ id }: { id: string }) {
 			worker.onmessage = (event: MessageEvent<RenderResponse>) => {
 				if (cancelled) return;
 				if (event.data.type === "success") {
+					// Strip the key from the URL bar after successful decryption.
+					// Prevents it persisting in browser history on navigation away.
+					// The key is captured in state so PasteView can still use it.
+					history.replaceState(null, "", window.location.pathname);
 					setState({
 						status: "done",
 						paste,
 						html: event.data.html,
 						plaintext: event.data.plaintext,
+						keyB64url,
 					});
 				} else {
 					setState({ status: "error", message: event.data.message });
@@ -168,13 +185,12 @@ export function PasteClientPage({ id }: { id: string }) {
 		);
 	}
 
-	const keyB64url = window.location.hash.slice(1);
 	return (
 		<PasteView
 			paste={state.paste}
 			html={state.html}
 			plaintext={state.plaintext}
-			keyB64url={keyB64url}
+			keyB64url={state.keyB64url}
 		/>
 	);
 }
@@ -196,7 +212,6 @@ function Skeleton() {
 				<div className="space-y-2 p-6">
 					{[100, 85, 92, 70, 88, 60, 75].map((w, i) => (
 						<div
-							// biome-ignore lint/suspicious/noArrayIndexKey: skeleton lines are stable
 							key={i}
 							className="h-3.5 rounded bg-white/[0.05]"
 							style={{ width: `${w}%` }}

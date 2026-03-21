@@ -276,7 +276,6 @@ export function PasteView({
 								aria-hidden="true"
 							>
 								{lines.map((_, i) => (
-									// biome-ignore lint/suspicious/noArrayIndexKey: line numbers are positional
 									<div key={i}>{i + 1}</div>
 								))}
 							</div>

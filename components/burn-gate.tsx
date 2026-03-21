@@ -26,7 +26,13 @@ interface FetchedPaste {
 type State =
 	| "confirm"
 	| "loading"
-	| { status: "done"; paste: FetchedPaste; html: string; plaintext: string }
+	| {
+			status: "done";
+			paste: FetchedPaste;
+			html: string;
+			plaintext: string;
+			keyB64url: string;
+	  }
 	| "error";
 
 export function BurnGate({ id }: BurnGateProps) {
@@ -60,11 +66,15 @@ export function BurnGate({ id }: BurnGateProps) {
 				worker.onmessage = (event: MessageEvent<RenderResponse>) => {
 					worker.terminate();
 					if (event.data.type === "success") {
+						// Paste is now consumed — strip the key from the URL bar.
+						// The key is stored in state so PasteView can still render it.
+						history.replaceState(null, "", window.location.pathname);
 						setState({
 							status: "done",
 							paste,
 							html: event.data.html,
 							plaintext: event.data.plaintext,
+							keyB64url,
 						});
 						resolve();
 					} else {
@@ -94,13 +104,12 @@ export function BurnGate({ id }: BurnGateProps) {
 	}
 
 	if (typeof state === "object" && state.status === "done") {
-		const keyB64url = window.location.hash.slice(1);
 		return (
 			<PasteView
 				paste={state.paste}
 				html={state.html}
 				plaintext={state.plaintext}
-				keyB64url={keyB64url}
+				keyB64url={state.keyB64url}
 			/>
 		);
 	}
