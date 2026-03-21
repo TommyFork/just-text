@@ -16,9 +16,16 @@ export function getRedis(): Redis {
 		redis = new Redis({
 			host: parsed.hostname,
 			port: parsed.port ? Number(parsed.port) : 6379,
-			username: parsed.username ? decodeURIComponent(parsed.username) : undefined,
-			password: parsed.password ? decodeURIComponent(parsed.password) : undefined,
-			db: parsed.pathname && parsed.pathname !== "/" ? Number(parsed.pathname.slice(1)) : 0,
+			username: parsed.username
+				? decodeURIComponent(parsed.username)
+				: undefined,
+			password: parsed.password
+				? decodeURIComponent(parsed.password)
+				: undefined,
+			db:
+				parsed.pathname && parsed.pathname !== "/"
+					? Number(parsed.pathname.slice(1))
+					: 0,
 			tls: parsed.protocol === "rediss:" ? {} : undefined,
 			maxRetriesPerRequest: 3,
 			retryStrategy(times) {
