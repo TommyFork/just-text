@@ -3,6 +3,14 @@ import { getClientIp } from "@/lib/ip";
 import { getPaste } from "@/lib/paste";
 import { checkReadRateLimit } from "@/lib/rate-limit";
 
+function logApiError(context: string, error: unknown): void {
+	if (error instanceof Error) {
+		console.error(`Error ${context}:`, error.message);
+	} else {
+		console.error(`Error ${context}:`, error);
+	}
+}
+
 export async function GET(
 	request: NextRequest,
 	{ params }: { params: Promise<{ id: string }> },
@@ -42,7 +50,7 @@ export async function GET(
 			},
 		});
 	} catch (error) {
-		console.error("Error reading paste:", error);
+		logApiError("reading paste", error);
 		return NextResponse.json(
 			{ error: "Failed to read paste" },
 			{ status: 500 },

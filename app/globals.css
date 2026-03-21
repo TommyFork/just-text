@@ -160,3 +160,46 @@
 		color: oklch(0.985 0 0);
 	}
 }
+
+/* Shiki syntax-highlighted code block with line numbers */
+.shiki-wrapper {
+	overflow-x: auto;
+	font-size: 0.875rem;
+	line-height: 1.6;
+}
+
+.shiki-wrapper pre {
+	background: transparent !important;
+	padding: 0.875rem 0;
+	margin: 0;
+}
+
+.shiki-wrapper code {
+	background: transparent !important;
+	counter-reset: shiki-line;
+	display: block;
+	/* Collapse the \n text nodes between .line spans so they don't
+	   render as blank lines when .line is display:block */
+	white-space: normal;
+}
+
+.shiki-wrapper .line {
+	display: block;
+	/* Restore pre whitespace so code content renders correctly */
+	white-space: pre;
+	padding-right: 1.5rem;
+}
+
+.shiki-wrapper .line::before {
+	counter-increment: shiki-line;
+	content: counter(shiki-line);
+	display: inline-block;
+	min-width: 2ch;
+	padding: 0 0.875rem 0 1.25rem;
+	margin-right: 1.25rem;
+	text-align: right;
+	color: oklch(1 0 0 / 0.14);
+	user-select: none;
+	-webkit-user-select: none;
+	border-right: 1px solid oklch(1 0 0 / 0.07);
+}

@@ -6,6 +6,7 @@ import {
 	PopoverContent,
 	PopoverTrigger,
 } from "@/components/ui/popover";
+import { getBaseUrl } from "@/lib/utils";
 import { CopyButton } from "./copy-button";
 
 interface SharePopoverProps {
@@ -15,7 +16,7 @@ interface SharePopoverProps {
 }
 
 export function SharePopover({ id, mobileInline }: SharePopoverProps) {
-	const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
+	const baseUrl = getBaseUrl();
 	const styledUrl = `${baseUrl}/${id}`;
 	const rawUrl = `${baseUrl}/text/${id}`;
 

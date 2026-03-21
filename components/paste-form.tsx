@@ -1,7 +1,13 @@
 "use client";
 
-import { Code, Fire, MarkdownLogo, TextT } from "@phosphor-icons/react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+	CircleNotch,
+	Code,
+	Fire,
+	MarkdownLogo,
+	TextT,
+} from "@phosphor-icons/react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,6 +31,8 @@ import { Textarea } from "@/components/ui/textarea";
 import {
 	DEFAULT_EXPIRY_VALUE,
 	EXPIRY_OPTIONS,
+	getLanguageDisplayName,
+	LANGUAGE_DISPLAY_MAP,
 	MAX_PASTE_SIZE_BYTES,
 	type PasteFormat,
 	POPULAR_LANGUAGES,
@@ -32,6 +40,8 @@ import {
 import { formatBytes } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { ShareModal } from "./share-modal";
+
+const TEXTAREA_HEIGHT_PX = 380;
 
 interface PasteResult {
 	id: string;
@@ -49,34 +59,8 @@ const FORMAT_OPTIONS: {
 	{ value: "code", label: "Code", icon: <Code size={14} /> },
 ];
 
-const LANG_DISPLAY: Record<string, string> = {
-	typescript: "TypeScript",
-	javascript: "JavaScript",
-	python: "Python",
-	rust: "Rust",
-	go: "Go",
-	java: "Java",
-	c: "C",
-	cpp: "C++",
-	csharp: "C#",
-	ruby: "Ruby",
-	php: "PHP",
-	swift: "Swift",
-	kotlin: "Kotlin",
-	sql: "SQL",
-	html: "HTML",
-	css: "CSS",
-	json: "JSON",
-	yaml: "YAML",
-	toml: "TOML",
-	bash: "Bash",
-	dockerfile: "Dockerfile",
-	markdown: "Markdown",
-	plaintext: "Plain Text",
-};
-
 function displayLang(lang: string): string {
-	return LANG_DISPLAY[lang] ?? lang;
+	return getLanguageDisplayName(lang);
 }
 
 export function PasteForm() {
@@ -127,9 +111,16 @@ export function PasteForm() {
 		}
 	}, [format]);
 
-	const sizeBytes = new Blob([content]).size;
-	const sizeOverLimit = sizeBytes > MAX_PASTE_SIZE_BYTES;
-	const lineCount = content ? content.split("\n").length : 0;
+	const { sizeBytes, sizeOverLimit, lineCount } = useMemo(() => {
+		const sizeBytes = Buffer.byteLength(content, "utf8");
+		return {
+			sizeBytes,
+			sizeOverLimit: sizeBytes > MAX_PASTE_SIZE_BYTES,
+			lineCount: content ? content.split("\n").length : 0,
+		};
+	}, [content]);
+
+	const isSubmitDisabled = !content.trim() || loading || sizeOverLimit;
 
 	const handleSubmit = useCallback(async () => {
 		if (!content.trim() || loading || sizeOverLimit) return;
@@ -177,14 +168,17 @@ export function PasteForm() {
 	]);
 
 	useEffect(() => {
+		const textarea = textareaRef.current;
+		if (!textarea) return;
+
 		function handleKeyDown(e: KeyboardEvent) {
 			if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
 				e.preventDefault();
 				handleSubmit();
 			}
 		}
-		window.addEventListener("keydown", handleKeyDown);
-		return () => window.removeEventListener("keydown", handleKeyDown);
+		textarea.addEventListener("keydown", handleKeyDown);
+		return () => textarea.removeEventListener("keydown", handleKeyDown);
 	}, [handleSubmit]);
 
 	if (result) {
@@ -208,10 +202,10 @@ export function PasteForm() {
 			<div className="overflow-hidden rounded-xl border border-white/[0.07] bg-card shadow-[0_0_0_1px_oklch(1_0_0/0.03),0_32px_64px_-16px_oklch(0_0_0/0.7),0_0_0_1px_oklch(0_0_0/0.3)inset]">
 				{/* Format tabs - no border, floating style */}
 				<div className="relative">
-					<div className="flex items-center justify-between px-4 pt-3">
+					<div className="flex items-center justify-between gap-2 px-4 pt-3">
 						<div
 							ref={tabsRef}
-							className="relative inline-flex h-8 items-center gap-0.5 rounded-full bg-white/[0.06] px-0.5"
+							className="relative inline-flex h-8 items-center gap-0.5 rounded-full bg-white/[0.06] px-0.5 shrink-0"
 						>
 							<div
 								className="absolute inset-y-[2px] rounded-full bg-white/[0.12] shadow-sm transition-all duration-200 ease-out"
@@ -223,15 +217,23 @@ export function PasteForm() {
 									type="button"
 									onClick={() => setFormat(opt.value)}
 									disabled={loading}
+									aria-pressed={format === opt.value}
 									className={cn(
-										"relative z-10 inline-flex h-6 items-center justify-center gap-1 rounded-full px-3 text-xs font-medium transition-colors disabled:pointer-events-none",
+										"relative z-10 inline-flex h-6 items-center justify-center gap-1 rounded-full px-2 sm:px-3 text-xs font-medium transition-colors disabled:pointer-events-none whitespace-nowrap",
 										format === opt.value
 											? "text-foreground"
 											: "text-muted-foreground hover:text-foreground/80",
 									)}
 								>
 									{opt.icon}
-									{opt.label}
+									<span className="hidden sm:inline">{opt.label}</span>
+									<span className="sm:hidden">
+										{opt.value === "plain"
+											? "Text"
+											: opt.value === "markdown"
+												? "MD"
+												: "Code"}
+									</span>
 								</button>
 							))}
 						</div>
@@ -241,13 +243,13 @@ export function PasteForm() {
 							<Combobox
 								value={displayLang(language)}
 								onValueChange={(value) => {
-									const langKey = Object.keys(LANG_DISPLAY).find(
-										(key) => LANG_DISPLAY[key] === value,
+									const langKey = Object.keys(LANGUAGE_DISPLAY_MAP).find(
+										(key) => LANGUAGE_DISPLAY_MAP[key] === value,
 									);
 									setLanguage(langKey || value.toLowerCase());
 								}}
 							>
-								<ComboboxTrigger className="w-32">
+								<ComboboxTrigger className="w-24 sm:w-32 shrink-0">
 									{displayLang(language)}
 								</ComboboxTrigger>
 								<ComboboxContent>
@@ -274,8 +276,14 @@ export function PasteForm() {
 							value={content}
 							onChange={(e) => setContent(e.target.value)}
 							placeholder="Paste or type your text here..."
-							className="h-[380px] max-h-[380px] resize-y border-0 bg-transparent px-5 py-4 text-sm leading-relaxed placeholder:text-muted-foreground/25 focus-visible:ring-0 focus-visible:ring-offset-0"
+							className="border-0 bg-transparent px-5 py-4 text-sm leading-relaxed placeholder:text-muted-foreground/25 focus-visible:ring-0 focus-visible:ring-offset-0"
+							style={{
+								height: `${TEXTAREA_HEIGHT_PX}px`,
+								maxHeight: `${TEXTAREA_HEIGHT_PX}px`,
+								resize: "vertical",
+							}}
 							spellCheck={false}
+							aria-label="Paste content"
 						/>
 						<div className="sticky bottom-0 h-8 -mt-8 bg-gradient-to-t from-card to-transparent pointer-events-none" />
 					</div>
@@ -283,7 +291,7 @@ export function PasteForm() {
 			</div>
 
 			{/* Controls */}
-			<div className="mt-3 flex items-center gap-2">
+			<div className="mt-3 flex flex-wrap items-center gap-2 sm:flex-nowrap">
 				{/* Expiry picker */}
 				<Select
 					value={String(expirySeconds)}
@@ -323,7 +331,7 @@ export function PasteForm() {
 				{content.length > 0 && (
 					<span
 						className={cn(
-							"text-xs tabular-nums text-muted-foreground/35",
+							"hidden text-xs tabular-nums text-muted-foreground/35 xs:block",
 							sizeOverLimit && "text-destructive",
 						)}
 					>
@@ -333,7 +341,7 @@ export function PasteForm() {
 				)}
 
 				{/* Keyboard hint */}
-				<div className="flex items-center gap-0.5 text-xs text-muted-foreground/30">
+				<div className="hidden items-center gap-0.5 text-xs text-muted-foreground/30 sm:flex">
 					<Kbd>{isMac ? "⌘" : "Ctrl"}</Kbd>
 					<span className="mx-0.5 opacity-50">+</span>
 					<Kbd>↵</Kbd>
@@ -343,15 +351,19 @@ export function PasteForm() {
 				<Button
 					size="sm"
 					onClick={handleSubmit}
-					disabled={!content.trim() || loading || sizeOverLimit}
+					disabled={isSubmitDisabled}
 					className={cn(
-						"h-8 gap-1.5 rounded-full bg-primary px-4 text-xs font-medium text-primary-foreground transition-all hover:brightness-110 disabled:opacity-35 disabled:hover:brightness-100",
-						!content.trim() || loading || sizeOverLimit
+						"h-8 min-w-[4rem] gap-1.5 rounded-full bg-primary px-4 text-xs font-medium text-primary-foreground transition-all hover:brightness-110 disabled:opacity-35 disabled:hover:brightness-100",
+						isSubmitDisabled
 							? "shadow-none"
 							: "shadow-[0_0_20px_-4px_oklch(0.56_0.23_264/0.65)]",
 					)}
 				>
-					{loading ? "Sharing..." : "Share"}
+					{loading ? (
+						<CircleNotch size={13} className="animate-spin" />
+					) : (
+						"Share"
+					)}
 				</Button>
 			</div>
 

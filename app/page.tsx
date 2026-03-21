@@ -16,7 +16,7 @@ export const metadata: Metadata = {
 
 export default function Home() {
 	return (
-		<div className="flex min-h-svh flex-col items-center justify-center px-4 py-16">
+		<div className="flex min-h-svh flex-col items-center justify-center px-4 py-8 md:py-16">
 			<header className="mb-6 text-center">
 				<h1 className="bg-gradient-to-b from-foreground to-foreground/55 bg-clip-text text-2xl font-bold tracking-tighter text-transparent">
 					textdrop.sh
