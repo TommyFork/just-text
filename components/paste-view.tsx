@@ -265,24 +265,28 @@ export function PasteView({
 					/>
 				) : (
 					<div className="overflow-x-auto">
-						<div className="flex py-5 text-sm leading-relaxed">
+						<div
+							className="flex items-start gap-4 py-5 pl-5 text-sm"
+							style={{ lineHeight: "1.5" }}
+						>
 							{/* Gutter */}
 							<div
-								className="select-none shrink-0 border-r border-white/[0.05] pr-4 text-right font-mono text-muted-foreground/20"
+								className="select-none shrink-0 text-right font-mono text-muted-foreground/20"
 								style={{
-									paddingLeft: "1.25rem",
-									minWidth: `${gutterWidth + 3}ch`,
+									minWidth: `${gutterWidth}ch`,
 								}}
 								aria-hidden="true"
 							>
 								{lines.map((_, i) => (
-									<div key={i}>{i + 1}</div>
+									<div key={i} style={{ lineHeight: "inherit" }}>
+										{i + 1}
+									</div>
 								))}
 							</div>
 							{/* Content — plain text is pre-escaped in the worker, safe to use directly */}
 							<pre
-								className="px-5 text-foreground/90"
-								style={{ whiteSpace: "pre" }}
+								className="text-foreground/90"
+								style={{ whiteSpace: "pre", lineHeight: "inherit" }}
 							>
 								{plaintext}
 							</pre>

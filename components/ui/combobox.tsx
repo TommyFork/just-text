@@ -83,7 +83,7 @@ function ComboboxTrigger({
 			<button
 				type="button"
 				className={cn(
-					"flex h-7 items-center justify-between gap-1.5 rounded-full bg-white/[0.06] px-3 text-xs text-muted-foreground transition-colors hover:bg-white/[0.09] focus-visible:bg-white/[0.09] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+					"flex h-8 items-center justify-between gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.04] px-3 text-xs font-medium text-muted-foreground transition-all hover:bg-white/[0.07] hover:text-foreground focus-visible:bg-white/[0.07] focus-visible:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
 					className,
 				)}
 			>
@@ -167,12 +167,7 @@ interface ComboboxListProps {
 
 function ComboboxList({ children, className }: ComboboxListProps) {
 	return (
-		<div
-			className={cn(
-				"scrollbar-thin-dark max-h-48 overflow-y-auto py-1",
-				className,
-			)}
-		>
+		<div className={cn("max-h-48 overflow-y-auto py-1", className)}>
 			{children}
 		</div>
 	);
