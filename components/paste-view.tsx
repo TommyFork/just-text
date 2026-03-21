@@ -171,10 +171,7 @@ export function PasteView({ paste, highlightedHtml }: PasteViewProps) {
 			<div className="overflow-hidden rounded-xl border border-white/[0.07] bg-card shadow-[0_0_0_1px_oklch(1_0_0/0.03),0_32px_64px_-16px_oklch(0_0_0/0.7)]">
 				{paste.format === "code" && highlightedHtml ? (
 					<div className="overflow-x-auto">
-						<div
-							className="py-5 pl-5 text-sm"
-							style={{ lineHeight: "1.5" }}
-						>
+						<div className="py-5 pl-5 text-sm" style={{ lineHeight: "1.5" }}>
 							<div
 								className="shiki-content"
 								dangerouslySetInnerHTML={{ __html: highlightedHtml }}
