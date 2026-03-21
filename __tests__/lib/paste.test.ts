@@ -1,14 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { MAX_PASTE_SIZE_BYTES } from "../../lib/constants";
 
 // Mock dependencies before importing the module under test
 vi.mock("../../lib/redis", () => ({
 	getRedis: vi.fn(),
-}));
-
-vi.mock("../../lib/crypto", () => ({
-	encrypt: vi.fn((text: string) => `enc:${text}`),
-	decrypt: vi.fn((text: string) => text.replace(/^enc:/, "")),
 }));
 
 vi.mock("nanoid", () => ({
@@ -18,10 +12,13 @@ vi.mock("nanoid", () => ({
 import { createPaste, getPaste, getPasteMetadata } from "../../lib/paste";
 import { getRedis } from "../../lib/redis";
 
+// Minimal valid Base64URL strings for fixtures
+const TEST_CIPHERTEXT = "dGVzdGNpcGhlcnRleHQ"; // "testciphertext" base64url
+const TEST_IV = "AAAAAAAAAAAAAAAA"; // 12-byte IV base64url (16 chars = 12 bytes)
+
 function makeMockRedis() {
 	const store: Record<string, string> = {};
 	const ttls: Record<string, number> = {};
-	const lists: Record<string, string[]> = {};
 
 	return {
 		store,
@@ -45,12 +42,6 @@ function makeMockRedis() {
 				return 1;
 			}),
 			ttl: vi.fn(async (key: string) => ttls[key] ?? -1),
-			lpush: vi.fn(async (key: string, value: string) => {
-				lists[key] = lists[key] ?? [];
-				lists[key].unshift(value);
-				return lists[key].length;
-			}),
-			llen: vi.fn(async (key: string) => (lists[key] ?? []).length),
 			eval: vi.fn(async (_script: string, _numkeys: number, key: string) => {
 				const raw = store[key] ?? null;
 				if (!raw) return null;
@@ -78,44 +69,52 @@ describe("paste", () => {
 	beforeEach(() => {
 		mockRedis = makeMockRedis();
 		vi.mocked(getRedis).mockReturnValue(mockRedis.redis as never);
-		process.env.ENCRYPTION_KEY = "a".repeat(64);
 	});
 
 	describe("createPaste", () => {
-		it("creates a paste and returns it with decrypted content", async () => {
+		it("creates a paste and returns it with correct fields", async () => {
 			const result = await createPaste({
-				content: "hello world",
+				ciphertext: TEST_CIPHERTEXT,
+				iv: TEST_IV,
 				format: "plain",
 				expirySeconds: 3600,
 				burnAfterRead: false,
+				sizeBytes: 11,
 			});
 
 			expect(result.id).toBe("testid1234");
-			expect(result.content).toBe("hello world");
+			expect(result.ciphertext).toBe(TEST_CIPHERTEXT);
+			expect(result.iv).toBe(TEST_IV);
 			expect(result.format).toBe("plain");
 			expect(result.burnAfterRead).toBe(false);
 			expect(result.viewCount).toBe(0);
-			expect(result.sizeBytes).toBe(Buffer.byteLength("hello world", "utf8"));
+			expect(result.sizeBytes).toBe(11);
 		});
 
-		it("stores encrypted content in Redis", async () => {
+		it("stores ciphertext and iv in Redis (no plaintext)", async () => {
 			await createPaste({
-				content: "secret",
+				ciphertext: TEST_CIPHERTEXT,
+				iv: TEST_IV,
 				format: "plain",
 				expirySeconds: 0,
 				burnAfterRead: false,
+				sizeBytes: 4,
 			});
 
 			const stored = JSON.parse(mockRedis.store["paste:testid1234"]);
-			expect(stored.content).toBe("enc:secret");
+			expect(stored.ciphertext).toBe(TEST_CIPHERTEXT);
+			expect(stored.iv).toBe(TEST_IV);
+			expect(stored).not.toHaveProperty("content");
 		});
 
 		it("sets TTL when expirySeconds > 0", async () => {
 			await createPaste({
-				content: "expires soon",
+				ciphertext: TEST_CIPHERTEXT,
+				iv: TEST_IV,
 				format: "plain",
 				expirySeconds: 3600,
 				burnAfterRead: false,
+				sizeBytes: 4,
 			});
 
 			expect(mockRedis.redis.set).toHaveBeenCalledWith(
@@ -128,10 +127,12 @@ describe("paste", () => {
 
 		it("does not set TTL when expirySeconds is 0", async () => {
 			await createPaste({
-				content: "never expires",
+				ciphertext: TEST_CIPHERTEXT,
+				iv: TEST_IV,
 				format: "plain",
 				expirySeconds: 0,
 				burnAfterRead: false,
+				sizeBytes: 4,
 			});
 
 			expect(mockRedis.redis.expire).not.toHaveBeenCalled();
@@ -141,35 +142,27 @@ describe("paste", () => {
 			);
 		});
 
-		it("throws when content is empty", async () => {
+		it("throws when ciphertext is empty", async () => {
 			await expect(
 				createPaste({
-					content: "",
+					ciphertext: "",
+					iv: TEST_IV,
 					format: "plain",
 					expirySeconds: 0,
 					burnAfterRead: false,
+					sizeBytes: 0,
 				}),
-			).rejects.toThrow("Content cannot be empty");
-		});
-
-		it("throws when content exceeds max size", async () => {
-			const huge = "x".repeat(MAX_PASTE_SIZE_BYTES + 1);
-			await expect(
-				createPaste({
-					content: huge,
-					format: "plain",
-					expirySeconds: 0,
-					burnAfterRead: false,
-				}),
-			).rejects.toThrow("exceeds maximum size");
+			).rejects.toThrow("Ciphertext cannot be empty");
 		});
 
 		it("sets expiresAt to null when expirySeconds is 0", async () => {
 			const result = await createPaste({
-				content: "no expiry",
+				ciphertext: TEST_CIPHERTEXT,
+				iv: TEST_IV,
 				format: "plain",
 				expirySeconds: 0,
 				burnAfterRead: false,
+				sizeBytes: 4,
 			});
 			expect(result.expiresAt).toBeNull();
 		});
@@ -177,10 +170,12 @@ describe("paste", () => {
 		it("sets expiresAt when expirySeconds > 0", async () => {
 			const before = Math.floor(Date.now() / 1000);
 			const result = await createPaste({
-				content: "expires",
+				ciphertext: TEST_CIPHERTEXT,
+				iv: TEST_IV,
 				format: "plain",
 				expirySeconds: 3600,
 				burnAfterRead: false,
+				sizeBytes: 4,
 			});
 			const after = Math.floor(Date.now() / 1000);
 			expect(result.expiresAt).toBeGreaterThanOrEqual(before + 3600);
@@ -189,65 +184,19 @@ describe("paste", () => {
 
 		it("stores language field for code format", async () => {
 			const result = await createPaste({
-				content: "const x = 1;",
+				ciphertext: TEST_CIPHERTEXT,
+				iv: TEST_IV,
 				format: "code",
 				language: "typescript",
 				expirySeconds: 0,
 				burnAfterRead: false,
+				sizeBytes: 12,
 			});
 
 			expect(result.language).toBe("typescript");
 
 			const stored = JSON.parse(mockRedis.store["paste:testid1234"]);
 			expect(stored.language).toBe("typescript");
-		});
-
-		it("stores language field regardless of format", async () => {
-			const result = await createPaste({
-				content: "# Hello",
-				format: "markdown",
-				language: "typescript",
-				expirySeconds: 0,
-				burnAfterRead: false,
-			});
-
-			expect(result.language).toBe("typescript");
-		});
-
-		it("strips null bytes from content", async () => {
-			const contentWithNull = "hello\0world";
-			const result = await createPaste({
-				content: contentWithNull,
-				format: "plain",
-				expirySeconds: 0,
-				burnAfterRead: false,
-			});
-
-			expect(result.content).toBe("helloworld");
-			expect(result.content).not.toContain("\0");
-		});
-
-		it("handles content with multiple null bytes", async () => {
-			const result = await createPaste({
-				content: "\0\0test\0\0",
-				format: "plain",
-				expirySeconds: 0,
-				burnAfterRead: false,
-			});
-
-			expect(result.content).toBe("test");
-		});
-
-		it("calculates sizeBytes from original content (before null byte removal)", async () => {
-			const contentWithNull = "hello\0world";
-			const result = await createPaste({
-				content: contentWithNull,
-				format: "plain",
-				expirySeconds: 0,
-				burnAfterRead: false,
-			});
-
-			expect(result.sizeBytes).toBe(Buffer.byteLength(contentWithNull, "utf8"));
 		});
 	});
 
@@ -257,10 +206,11 @@ describe("paste", () => {
 			expect(result).toBeNull();
 		});
 
-		it("returns the paste with decrypted content", async () => {
+		it("returns the paste with ciphertext and iv intact", async () => {
 			mockRedis.store["paste:abc123"] = JSON.stringify({
 				id: "abc123",
-				content: "enc:hello",
+				ciphertext: TEST_CIPHERTEXT,
+				iv: TEST_IV,
 				format: "plain",
 				createdAt: 1000,
 				expiresAt: null,
@@ -271,14 +221,16 @@ describe("paste", () => {
 
 			const result = await getPaste("abc123");
 			expect(result).not.toBeNull();
-			expect(result!.content).toBe("hello");
+			expect(result!.ciphertext).toBe(TEST_CIPHERTEXT);
+			expect(result!.iv).toBe(TEST_IV);
 			expect(result!.id).toBe("abc123");
 		});
 
 		it("increments viewCount for non-burn pastes", async () => {
 			mockRedis.store["paste:abc123"] = JSON.stringify({
 				id: "abc123",
-				content: "enc:test",
+				ciphertext: TEST_CIPHERTEXT,
+				iv: TEST_IV,
 				format: "plain",
 				createdAt: 1000,
 				expiresAt: null,
@@ -294,7 +246,8 @@ describe("paste", () => {
 		it("burn-after-read paste is deleted after first read", async () => {
 			mockRedis.store["paste:burn1"] = JSON.stringify({
 				id: "burn1",
-				content: "enc:secret",
+				ciphertext: TEST_CIPHERTEXT,
+				iv: TEST_IV,
 				format: "plain",
 				createdAt: 1000,
 				expiresAt: null,
@@ -311,7 +264,8 @@ describe("paste", () => {
 		it("burn-after-read paste is gone after first read", async () => {
 			mockRedis.store["paste:burn2"] = JSON.stringify({
 				id: "burn2",
-				content: "enc:gone",
+				ciphertext: TEST_CIPHERTEXT,
+				iv: TEST_IV,
 				format: "plain",
 				createdAt: 1000,
 				expiresAt: null,
@@ -327,28 +281,15 @@ describe("paste", () => {
 
 		it("returns null for corrupt JSON in Redis", async () => {
 			mockRedis.store["paste:corrupt"] = "not valid json {{{";
-
 			const result = await getPaste("corrupt");
 			expect(result).toBeNull();
 		});
 
-		it("returns paste with undefined fields for missing data", async () => {
-			mockRedis.store["paste:malformed"] = JSON.stringify({
-				content: "enc:test",
-				format: "plain",
-			});
-
-			const result = await getPaste("malformed");
-			expect(result).not.toBeNull();
-			expect(result!.viewCount).toBe(1);
-			expect(result!.language).toBeUndefined();
-			expect(result!.burnAfterRead).toBeUndefined();
-		});
-
-		it("returns metadata with language field", async () => {
+		it("returns paste with language field", async () => {
 			mockRedis.store["paste:lang1"] = JSON.stringify({
 				id: "lang1",
-				content: "enc:code",
+				ciphertext: TEST_CIPHERTEXT,
+				iv: TEST_IV,
 				format: "code",
 				language: "python",
 				createdAt: 1000,
@@ -369,10 +310,11 @@ describe("paste", () => {
 			expect(await getPasteMetadata("missing")).toBeNull();
 		});
 
-		it("returns metadata without content field", async () => {
+		it("returns metadata without ciphertext or iv fields", async () => {
 			mockRedis.store["paste:meta1"] = JSON.stringify({
 				id: "meta1",
-				content: "enc:private",
+				ciphertext: TEST_CIPHERTEXT,
+				iv: TEST_IV,
 				format: "markdown",
 				createdAt: 2000,
 				expiresAt: null,
@@ -383,9 +325,15 @@ describe("paste", () => {
 
 			const result = await getPasteMetadata("meta1");
 			expect(result).not.toBeNull();
-			expect(result).not.toHaveProperty("content");
+			expect(result).not.toHaveProperty("ciphertext");
+			expect(result).not.toHaveProperty("iv");
 			expect(result!.id).toBe("meta1");
 			expect(result!.viewCount).toBe(3);
+		});
+
+		it("returns null for corrupt JSON", async () => {
+			mockRedis.store["paste:bad"] = "{{invalid}}";
+			expect(await getPasteMetadata("bad")).toBeNull();
 		});
 	});
 });

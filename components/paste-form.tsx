@@ -31,6 +31,7 @@ import {
 	type PasteFormat,
 	POPULAR_LANGUAGES,
 } from "@/lib/constants";
+import { encrypt, generateKey } from "@/lib/crypto";
 import { formatBytes } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { ShareModal } from "./share-modal";
@@ -39,6 +40,7 @@ const TEXTAREA_HEIGHT_PX = 380;
 
 interface PasteResult {
 	id: string;
+	keyB64url: string;
 	expiresAt: number | null;
 	sizeBytes: number;
 }
@@ -136,7 +138,7 @@ export function PasteForm() {
 	}, [format]);
 
 	const { sizeBytes, sizeOverLimit, lineCount } = useMemo(() => {
-		const sizeBytes = Buffer.byteLength(content, "utf8");
+		const sizeBytes = new TextEncoder().encode(content).byteLength;
 		return {
 			sizeBytes,
 			sizeOverLimit: sizeBytes > MAX_PASTE_SIZE_BYTES,
@@ -153,15 +155,22 @@ export function PasteForm() {
 		setError(null);
 
 		try {
+			// Encrypt client-side — the server never sees the plaintext or the key
+			const { cryptoKey, keyB64url } = await generateKey();
+			const sizeBytes = new TextEncoder().encode(content).byteLength;
+			const { ciphertext, iv } = await encrypt(cryptoKey, content);
+
 			const res = await fetch("/api/paste", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
-					content,
+					ciphertext,
+					iv,
 					format,
 					language: format === "code" ? language : undefined,
 					expirySeconds,
 					burnAfterRead,
+					sizeBytes,
 				}),
 			});
 
@@ -171,8 +180,10 @@ export function PasteForm() {
 			}
 
 			const data = await res.json();
+			// keyB64url is appended as the hash fragment — never sent to server
 			setResult({
 				id: data.id,
+				keyB64url,
 				expiresAt: data.expiresAt,
 				sizeBytes: data.sizeBytes,
 			});
@@ -209,6 +220,7 @@ export function PasteForm() {
 		return (
 			<ShareModal
 				id={result.id}
+				keyB64url={result.keyB64url}
 				expiresAt={result.expiresAt}
 				sizeBytes={result.sizeBytes}
 				onCreateAnother={() => {

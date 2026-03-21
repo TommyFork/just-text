@@ -1,12 +1,13 @@
 "use client";
 
-import { ArrowSquareOut, Link, TextT } from "@phosphor-icons/react";
+import { ArrowSquareOut, Link, Terminal, TextT } from "@phosphor-icons/react";
 import { formatBytes } from "@/lib/format";
 import { formatDate, getBaseUrl } from "@/lib/utils";
 import { CopyButton } from "./copy-button";
 
 interface ShareModalProps {
 	id: string;
+	keyB64url: string;
 	expiresAt: number | null;
 	sizeBytes: number;
 	onCreateAnother: () => void;
@@ -14,13 +15,29 @@ interface ShareModalProps {
 
 export function ShareModal({
 	id,
+	keyB64url,
 	expiresAt,
 	sizeBytes,
 	onCreateAnother,
 }: ShareModalProps) {
 	const baseUrl = getBaseUrl();
-	const styledUrl = `${baseUrl}/${id}`;
+	// Hash fragment carries the decryption key — never sent to the server
+	const styledUrl = `${baseUrl}/${id}#${keyB64url}`;
 	const rawUrl = `${baseUrl}/text/${id}`;
+	const cliCommand = `node -e "
+const {createDecipheriv}=require('node:crypto');
+const id='${id}',key=Buffer.from('${keyB64url}','base64url');
+fetch('${baseUrl}/api/paste/'+id)
+  .then(r=>r.json())
+  .then(({ciphertext,iv})=>{
+    const ivBuf=Buffer.from(iv,'base64url');
+    const ctBuf=Buffer.from(ciphertext,'base64url');
+    const tag=ctBuf.subarray(ctBuf.length-16);
+    const ct=ctBuf.subarray(0,ctBuf.length-16);
+    const d=createDecipheriv('aes-256-gcm',key,ivBuf);
+    d.setAuthTag(tag);
+    process.stdout.write(Buffer.concat([d.update(ct),d.final()]).toString('utf8'));
+  });"`;
 
 	return (
 		<div className="animate-in fade-in slide-in-from-bottom-3 mx-auto w-full max-w-lg overflow-hidden rounded-xl border border-white/[0.07] bg-card shadow-[0_0_0_1px_oklch(1_0_0/0.03),0_32px_64px_-16px_oklch(0_0_0/0.7)]">
@@ -58,7 +75,7 @@ export function ShareModal({
 					<div>
 						<label className="mb-1.5 flex items-center gap-1.5 text-xs text-muted-foreground/50">
 							<TextT size={11} />
-							Raw text
+							Raw (ciphertext)
 						</label>
 						<div className="flex items-center gap-2">
 							<code className="flex-1 truncate rounded-lg border border-white/[0.07] bg-white/[0.04] px-3 py-2 text-xs text-muted-foreground/50">
@@ -69,11 +86,24 @@ export function ShareModal({
 								target="_blank"
 								rel="noopener noreferrer"
 								className="inline-flex items-center justify-center rounded-md p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-								title="Open in new tab"
+								title="Open raw ciphertext"
 							>
 								<ArrowSquareOut size={16} />
 							</a>
 							<CopyButton text={rawUrl} label="Copy raw link" />
+						</div>
+					</div>
+
+					<div>
+						<label className="mb-1.5 flex items-center gap-1.5 text-xs text-muted-foreground/50">
+							<Terminal size={11} />
+							CLI decrypt (Node.js 18+)
+						</label>
+						<div className="flex items-center gap-2">
+							<code className="flex-1 truncate rounded-lg border border-white/[0.07] bg-white/[0.04] px-3 py-2 text-xs text-muted-foreground/50">
+								node -e &quot;...&quot;
+							</code>
+							<CopyButton text={cliCommand} label="Copy CLI command" />
 						</div>
 					</div>
 				</div>

@@ -3,6 +3,7 @@
 import { Fire } from "@phosphor-icons/react";
 import { useState } from "react";
 import type { PasteFormat } from "@/lib/constants";
+import type { RenderRequest, RenderResponse } from "@/workers/render.worker";
 import { PasteView } from "./paste-view";
 
 interface BurnGateProps {
@@ -11,7 +12,8 @@ interface BurnGateProps {
 
 interface FetchedPaste {
 	id: string;
-	content: string;
+	ciphertext: string;
+	iv: string;
 	format: PasteFormat;
 	language?: string;
 	createdAt: number;
@@ -21,32 +23,86 @@ interface FetchedPaste {
 	sizeBytes: number;
 }
 
+type State =
+	| "confirm"
+	| "loading"
+	| { status: "done"; paste: FetchedPaste; html: string; plaintext: string }
+	| "error";
+
 export function BurnGate({ id }: BurnGateProps) {
-	const [state, setState] = useState<
-		"confirm" | "loading" | "revealed" | "error"
-	>("confirm");
-	const [paste, setPaste] = useState<FetchedPaste | null>(null);
+	const [state, setState] = useState<State>("confirm");
 	const [error, setError] = useState<string | null>(null);
 
 	async function handleReveal() {
 		setState("loading");
+
+		const keyB64url = window.location.hash.slice(1);
+		if (!keyB64url) {
+			setError("No decryption key in URL — cannot reveal this paste.");
+			setState("error");
+			return;
+		}
+
 		try {
+			// Fetching from this endpoint atomically deletes the paste (burn-after-read).
 			const res = await fetch(`/api/paste/${id}`);
 			if (!res.ok) {
 				const data = await res.json().catch(() => ({}));
 				throw new Error(data.error ?? "Paste not found or already viewed");
 			}
-			const data: FetchedPaste = await res.json();
-			setPaste(data);
-			setState("revealed");
+			const paste: FetchedPaste = await res.json();
+
+			await new Promise<void>((resolve, reject) => {
+				const worker = new Worker(
+					new URL("../workers/render.worker.ts", import.meta.url),
+				);
+
+				worker.onmessage = (event: MessageEvent<RenderResponse>) => {
+					worker.terminate();
+					if (event.data.type === "success") {
+						setState({
+							status: "done",
+							paste,
+							html: event.data.html,
+							plaintext: event.data.plaintext,
+						});
+						resolve();
+					} else {
+						reject(new Error(event.data.message));
+					}
+				};
+
+				worker.onerror = (err) => {
+					worker.terminate();
+					reject(new Error(err.message || "Worker error"));
+				};
+
+				const req: RenderRequest = {
+					type: "render",
+					ciphertext: paste.ciphertext,
+					iv: paste.iv,
+					keyB64url,
+					format: paste.format,
+					language: paste.language,
+				};
+				worker.postMessage(req);
+			});
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Something went wrong");
 			setState("error");
 		}
 	}
 
-	if (state === "revealed" && paste) {
-		return <PasteView paste={paste} />;
+	if (typeof state === "object" && state.status === "done") {
+		const keyB64url = window.location.hash.slice(1);
+		return (
+			<PasteView
+				paste={state.paste}
+				html={state.html}
+				plaintext={state.plaintext}
+				keyB64url={keyB64url}
+			/>
+		);
 	}
 
 	return (
@@ -88,7 +144,7 @@ export function BurnGate({ id }: BurnGateProps) {
 							className="mt-1 inline-flex h-9 items-center gap-2 rounded-full border border-orange-500/30 bg-orange-500/10 px-5 text-sm font-medium text-orange-400 transition-all hover:bg-orange-500/20 disabled:pointer-events-none disabled:opacity-50"
 						>
 							<Fire size={14} weight="fill" />
-							{state === "loading" ? "Loading..." : "View & burn"}
+							{state === "loading" ? "Decrypting..." : "View & burn"}
 						</button>
 					)}
 				</div>
