@@ -1,10 +1,15 @@
 "use client";
 
 import { ArrowSquareOut, Info, Link, Lock } from "@phosphor-icons/react";
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipProvider,
+	TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { formatBytes } from "@/lib/format";
 import { formatDate, getBaseUrl } from "@/lib/utils";
 import { CopyButton } from "./copy-button";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface ShareModalProps {
 	id: string;
