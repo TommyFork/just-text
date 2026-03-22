@@ -72,6 +72,82 @@ export async function encrypt(
 	};
 }
 
+// ── Password-based key derivation (Argon2id via PBKDF2-SHA256 fallback) ─────────
+// Uses PBKDF2 with high iteration count as a fallback when Argon2id is unavailable.
+// For production, prefer a native Argon2id implementation via argon2-browser.
+
+const PBKDF2_ITERATIONS = 600_000; // OWASP recommendation for PBKDF2-SHA256 (2023)
+const SALT_LENGTH = 16; // 128 bits
+
+export async function deriveKeyFromPassword(
+	password: string,
+	salt: Uint8Array,
+): Promise<CryptoKey> {
+	const encoder = new TextEncoder();
+	const passwordBuffer = encoder.encode(password);
+
+	const keyMaterial = await crypto.subtle.importKey(
+		"raw",
+		passwordBuffer,
+		"PBKDF2",
+		false,
+		["deriveBits", "deriveKey"],
+	);
+
+	return crypto.subtle.deriveKey(
+		{
+			name: "PBKDF2",
+			salt: salt.buffer as ArrayBuffer,
+			iterations: PBKDF2_ITERATIONS,
+			hash: "SHA-256",
+		},
+		keyMaterial,
+		{ name: "AES-GCM", length: 256 },
+		true, // extractable for wrapping
+		["wrapKey", "unwrapKey"],
+	);
+}
+
+export function generateSalt(): Uint8Array {
+	return crypto.getRandomValues(new Uint8Array(SALT_LENGTH));
+}
+
+// ── Key wrapping (encrypt dataKey with derived key) ──────────────────────────────
+// Used when password-protecting a paste.
+
+export async function wrapKey(
+	dataKey: CryptoKey,
+	wrappingKey: CryptoKey,
+): Promise<{ wrappedKey: string; iv: string }> {
+	const iv = crypto.getRandomValues(new Uint8Array(12));
+	const wrapped = await crypto.subtle.wrapKey("raw", dataKey, wrappingKey, {
+		name: "AES-GCM",
+		iv,
+	});
+	return {
+		wrappedKey: base64urlEncode(wrapped),
+		iv: base64urlEncode(iv),
+	};
+}
+
+// ── Key unwrapping (decrypt wrapped key with derived key) ─────────────────────
+
+export async function unwrapDataKey(
+	wrappedKey: string,
+	iv: string,
+	unwrappingKey: CryptoKey,
+): Promise<CryptoKey> {
+	return crypto.subtle.unwrapKey(
+		"raw",
+		base64urlDecode(wrappedKey).buffer as ArrayBuffer,
+		unwrappingKey,
+		{ name: "AES-GCM", iv: base64urlDecode(iv).buffer as ArrayBuffer },
+		{ name: "AES-GCM", length: 256 },
+		true,
+		["encrypt", "decrypt"],
+	);
+}
+
 // ── Decryption ─────────────────────────────────────────────────────────────────
 // Throws DOMException("OperationError") if the auth tag doesn't match
 // (tampered ciphertext, wrong key, or wrong IV).

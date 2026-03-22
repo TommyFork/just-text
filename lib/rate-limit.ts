@@ -41,22 +41,33 @@ export async function checkRateLimit(
 	};
 }
 
+export async function checkRateLimitWithConfig(
+	ip: string,
+	type: "paste" | "read",
+): Promise<RateLimitResult> {
+	let max: number, window: number;
+
+	if (type === "paste") {
+		max = parseInt(process.env.RATE_LIMIT_PASTE_MAX ?? "10", 10);
+		window = parseInt(
+			process.env.RATE_LIMIT_PASTE_WINDOW_SECONDS ?? "3600",
+			10,
+		);
+	} else {
+		max = parseInt(process.env.RATE_LIMIT_READ_MAX ?? "60", 10);
+		window = parseInt(process.env.RATE_LIMIT_READ_WINDOW_SECONDS ?? "60", 10);
+	}
+
+	return checkRateLimit(`${type}:${ip}`, max, window);
+}
+
+// Backward compatibility
 export async function checkPasteRateLimit(
 	ip: string,
 ): Promise<RateLimitResult> {
-	const max = parseInt(process.env.RATE_LIMIT_PASTE_MAX ?? "10", 10);
-	const window = parseInt(
-		process.env.RATE_LIMIT_PASTE_WINDOW_SECONDS ?? "3600",
-		10,
-	);
-	return checkRateLimit(`paste:${ip}`, max, window);
+	return checkRateLimitWithConfig(ip, "paste");
 }
 
 export async function checkReadRateLimit(ip: string): Promise<RateLimitResult> {
-	const max = parseInt(process.env.RATE_LIMIT_READ_MAX ?? "60", 10);
-	const window = parseInt(
-		process.env.RATE_LIMIT_READ_WINDOW_SECONDS ?? "60",
-		10,
-	);
-	return checkRateLimit(`read:${ip}`, max, window);
+	return checkRateLimitWithConfig(ip, "read");
 }

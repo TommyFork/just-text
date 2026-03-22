@@ -29,8 +29,18 @@ export function getRedis(): Redis {
 			tls: parsed.protocol === "rediss:" ? {} : undefined,
 			maxRetriesPerRequest: 3,
 			retryStrategy(times) {
-				if (times > 3) return null;
-				return Math.min(times * 200, 2000);
+				if (times > 5) return null;
+				return Math.min(times * 500, 3000);
+			},
+			enableReadyCheck: true,
+			connectTimeout: 10000,
+			commandTimeout: 5000,
+			reconnectOnError(err) {
+				const targetError = "READONLY";
+				if (err.message.includes(targetError)) {
+					return false;
+				}
+				return true;
 			},
 		});
 

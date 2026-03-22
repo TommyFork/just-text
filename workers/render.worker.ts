@@ -2,6 +2,7 @@
 // Runs in WorkerGlobalScope — no DOM, no React, no Node.js.
 // crypto.subtle is available natively in WorkerGlobalScope.
 
+import { marked } from "marked";
 import { base64urlDecode, base64urlEncode } from "@/lib/crypto";
 
 export type RenderRequest = {
@@ -17,34 +18,20 @@ export type RenderResponse =
 	| { type: "success"; html: string; plaintext: string }
 	| { type: "error"; message: string };
 
-// ── Crypto (inline — avoids importing the full lib/crypto module which uses
-//    top-level browser APIs that may not be available at module init in all envs)
-
-async function importKey(keyB64url: string): Promise<CryptoKey> {
-	const raw = base64urlDecode(keyB64url);
-	return crypto.subtle.importKey("raw", raw, { name: "AES-GCM" }, false, [
-		"decrypt",
-	]);
-}
-
-async function decryptPayload(
-	key: CryptoKey,
-	ciphertext: string,
-	iv: string,
-): Promise<string> {
-	const ciphertextBytes = base64urlDecode(ciphertext);
-	const ivBytes = base64urlDecode(iv);
-	const buf = await crypto.subtle.decrypt(
-		{ name: "AES-GCM", iv: ivBytes },
-		key,
-		ciphertextBytes,
-	);
-	return new TextDecoder().decode(buf);
-}
+// Import crypto functions from shared module
+import { decrypt, importKey } from "@/lib/crypto";
 
 // ── Renderers ──────────────────────────────────────────────────────────────────
 
+// Memory limit: 10MB for code rendering
+const MAX_CODE_SIZE = 10 * 1024 * 1024;
+
 async function renderCode(code: string, lang: string): Promise<string> {
+	// Check size limit
+	if (code.length > MAX_CODE_SIZE) {
+		throw new Error(`Code too large (${code.length} bytes). Maximum: 10MB`);
+	}
+
 	const { createHighlighter } = await import("shiki");
 	const hl = await createHighlighter({
 		themes: ["tokyo-night"],
@@ -56,25 +43,8 @@ async function renderCode(code: string, lang: string): Promise<string> {
 }
 
 async function renderMarkdown(md: string): Promise<string> {
-	// Use the unified pipeline — react-markdown requires DOM/React, incompatible with workers.
-	const { unified } = await import("unified");
-	const { default: remarkParse } = await import("remark-parse");
-	const { default: remarkGfm } = await import("remark-gfm");
-	const { default: remarkRehype } = await import("remark-rehype");
-	const { default: rehypeSanitize, defaultSchema } = await import(
-		"rehype-sanitize"
-	);
-	const { default: rehypeStringify } = await import("rehype-stringify");
-
-	const file = await unified()
-		.use(remarkParse)
-		.use(remarkGfm)
-		.use(remarkRehype, { allowDangerousHtml: false })
-		.use(rehypeSanitize, defaultSchema)
-		.use(rehypeStringify)
-		.process(md);
-
-	return String(file);
+	const html = await marked.parse(md, { async: true, gfm: true });
+	return `<div class="markdown-body">${html}</div>`;
 }
 
 function renderPlain(text: string): string {
@@ -95,7 +65,7 @@ self.onmessage = async (event: MessageEvent<RenderRequest>) => {
 
 	try {
 		const key = await importKey(keyB64url);
-		const plaintext = await decryptPayload(key, ciphertext, iv);
+		const plaintext = await decrypt(key, ciphertext, iv);
 
 		let html: string;
 		if (format === "code") {

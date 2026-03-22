@@ -80,6 +80,7 @@ describe("paste", () => {
 				expirySeconds: 3600,
 				burnAfterRead: false,
 				sizeBytes: 11,
+				passwordProtected: false,
 			});
 
 			expect(result.id).toBe("testid1234");
@@ -99,6 +100,7 @@ describe("paste", () => {
 				expirySeconds: 0,
 				burnAfterRead: false,
 				sizeBytes: 4,
+				passwordProtected: false,
 			});
 
 			const stored = JSON.parse(mockRedis.store["paste:testid1234"]);
@@ -115,6 +117,7 @@ describe("paste", () => {
 				expirySeconds: 3600,
 				burnAfterRead: false,
 				sizeBytes: 4,
+				passwordProtected: false,
 			});
 
 			expect(mockRedis.redis.set).toHaveBeenCalledWith(
@@ -133,6 +136,7 @@ describe("paste", () => {
 				expirySeconds: 0,
 				burnAfterRead: false,
 				sizeBytes: 4,
+				passwordProtected: false,
 			});
 
 			expect(mockRedis.redis.expire).not.toHaveBeenCalled();
@@ -151,6 +155,7 @@ describe("paste", () => {
 					expirySeconds: 0,
 					burnAfterRead: false,
 					sizeBytes: 0,
+					passwordProtected: false,
 				}),
 			).rejects.toThrow("Ciphertext cannot be empty");
 		});
@@ -163,6 +168,7 @@ describe("paste", () => {
 				expirySeconds: 0,
 				burnAfterRead: false,
 				sizeBytes: 4,
+				passwordProtected: false,
 			});
 			expect(result.expiresAt).toBeNull();
 		});
@@ -176,6 +182,7 @@ describe("paste", () => {
 				expirySeconds: 3600,
 				burnAfterRead: false,
 				sizeBytes: 4,
+				passwordProtected: false,
 			});
 			const after = Math.floor(Date.now() / 1000);
 			expect(result.expiresAt).toBeGreaterThanOrEqual(before + 3600);
@@ -191,6 +198,7 @@ describe("paste", () => {
 				expirySeconds: 0,
 				burnAfterRead: false,
 				sizeBytes: 12,
+				passwordProtected: false,
 			});
 
 			expect(result.language).toBe("typescript");

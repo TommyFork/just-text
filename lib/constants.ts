@@ -19,6 +19,12 @@ export const FORMAT_OPTIONS = [
 	{ label: "Code", value: "code" },
 ] as const;
 
+export interface FormatOption {
+	label: string;
+	value: PasteFormat;
+	icon?: React.ComponentType<{ size?: number; weight?: string }>;
+}
+
 export type PasteFormat = "plain" | "markdown" | "code";
 
 export const POPULAR_LANGUAGES = [

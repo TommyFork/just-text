@@ -3,9 +3,13 @@ import {
 	base64urlDecode,
 	base64urlEncode,
 	decrypt,
+	deriveKeyFromPassword,
 	encrypt,
 	generateKey,
+	generateSalt,
 	importKey,
+	unwrapDataKey,
+	wrapKey,
 } from "../../lib/crypto";
 
 // Node.js 18+ exposes globalThis.crypto.subtle natively — no polyfill needed.
@@ -170,8 +174,163 @@ describe("decrypt", () => {
 	it("throws on wrong iv", async () => {
 		const { cryptoKey } = await generateKey();
 		const { ciphertext } = await encrypt(cryptoKey, "data");
-		// Use a different random iv
 		const wrongIv = base64urlEncode(crypto.getRandomValues(new Uint8Array(12)));
 		await expect(decrypt(cryptoKey, ciphertext, wrongIv)).rejects.toThrow();
+	});
+});
+
+describe("generateSalt", () => {
+	it("returns a 16-byte Uint8Array", () => {
+		const salt = generateSalt();
+		expect(salt).toBeInstanceOf(Uint8Array);
+		expect(salt.byteLength).toBe(16);
+	});
+
+	it("produces different salts on each call", () => {
+		const a = generateSalt();
+		const b = generateSalt();
+		expect(a.some((byte, i) => byte !== b[i])).toBe(true);
+	});
+});
+
+describe("deriveKeyFromPassword", () => {
+	it("returns a CryptoKey", async () => {
+		const salt = generateSalt();
+		const key = await deriveKeyFromPassword("password", salt);
+		expect(key).toBeInstanceOf(CryptoKey);
+	});
+
+	it("same password and salt produces same key", async () => {
+		const salt = generateSalt();
+		const key1 = await deriveKeyFromPassword("password", salt);
+		const key2 = await deriveKeyFromPassword("password", salt);
+		const raw1 = await crypto.subtle.exportKey("raw", key1);
+		const raw2 = await crypto.subtle.exportKey("raw", key2);
+		expect(new Uint8Array(raw1)).toEqual(new Uint8Array(raw2));
+	});
+
+	it("different salts produce different keys", async () => {
+		const salt1 = generateSalt();
+		const salt2 = generateSalt();
+		const key1 = await deriveKeyFromPassword("password", salt1);
+		const key2 = await deriveKeyFromPassword("password", salt2);
+		const raw1 = await crypto.subtle.exportKey("raw", key1);
+		const raw2 = await crypto.subtle.exportKey("raw", key2);
+		expect(new Uint8Array(raw1)).not.toEqual(new Uint8Array(raw2));
+	});
+
+	it("different passwords produce different keys", async () => {
+		const salt = generateSalt();
+		const key1 = await deriveKeyFromPassword("password1", salt);
+		const key2 = await deriveKeyFromPassword("password2", salt);
+		const raw1 = await crypto.subtle.exportKey("raw", key1);
+		const raw2 = await crypto.subtle.exportKey("raw", key2);
+		expect(new Uint8Array(raw1)).not.toEqual(new Uint8Array(raw2));
+	});
+
+	it("derived key can be used for wrapKey", async () => {
+		const salt = generateSalt();
+		const wrappingKey = await deriveKeyFromPassword("password", salt);
+		const { cryptoKey: dataKey } = await generateKey();
+
+		const { wrappedKey, iv } = await wrapKey(dataKey, wrappingKey);
+		expect(typeof wrappedKey).toBe("string");
+		expect(wrappedKey.length).toBeGreaterThan(0);
+		expect(typeof iv).toBe("string");
+		expect(base64urlDecode(iv).byteLength).toBe(12);
+	});
+});
+
+describe("wrapKey", () => {
+	it("returns non-empty wrappedKey and iv", async () => {
+		const wrappingKey = await deriveKeyFromPassword("password", generateSalt());
+		const { cryptoKey: dataKey } = await generateKey();
+
+		const { wrappedKey, iv } = await wrapKey(dataKey, wrappingKey);
+		expect(typeof wrappedKey).toBe("string");
+		expect(wrappedKey.length).toBeGreaterThan(0);
+		expect(typeof iv).toBe("string");
+		expect(iv.length).toBeGreaterThan(0);
+	});
+
+	it("wrappedKey contains no URL-unsafe characters", async () => {
+		const wrappingKey = await deriveKeyFromPassword("password", generateSalt());
+		const { cryptoKey: dataKey } = await generateKey();
+
+		const { wrappedKey } = await wrapKey(dataKey, wrappingKey);
+		expect(wrappedKey).not.toMatch(/[+/=]/);
+	});
+
+	it("iv decodes to exactly 12 bytes", async () => {
+		const wrappingKey = await deriveKeyFromPassword("password", generateSalt());
+		const { cryptoKey: dataKey } = await generateKey();
+
+		const { iv } = await wrapKey(dataKey, wrappingKey);
+		expect(base64urlDecode(iv).byteLength).toBe(12);
+	});
+
+	it("produces different wrapped keys each time (random IV)", async () => {
+		const wrappingKey = await deriveKeyFromPassword("password", generateSalt());
+		const { cryptoKey: dataKey } = await generateKey();
+
+		const a = await wrapKey(dataKey, wrappingKey);
+		const b = await wrapKey(dataKey, wrappingKey);
+		expect(a.wrappedKey).not.toBe(b.wrappedKey);
+		expect(a.iv).not.toBe(b.iv);
+	});
+});
+
+describe("unwrapDataKey", () => {
+	it("roundtrip: unwrapDataKey(wrapKey(dataKey)) equals original dataKey", async () => {
+		const salt = generateSalt();
+		const wrappingKey = await deriveKeyFromPassword("password", salt);
+		const { cryptoKey: dataKey } = await generateKey();
+
+		const { wrappedKey, iv } = await wrapKey(dataKey, wrappingKey);
+		const unwrappedKey = await unwrapDataKey(wrappedKey, iv, wrappingKey);
+
+		const rawOriginal = await crypto.subtle.exportKey("raw", dataKey);
+		const rawUnwrapped = await crypto.subtle.exportKey("raw", unwrappedKey);
+		expect(new Uint8Array(rawOriginal)).toEqual(new Uint8Array(rawUnwrapped));
+	});
+
+	it("unwrapped key can decrypt what original key encrypted", async () => {
+		const salt = generateSalt();
+		const wrappingKey = await deriveKeyFromPassword("password", salt);
+		const { cryptoKey: dataKey } = await generateKey();
+
+		const { wrappedKey, iv } = await wrapKey(dataKey, wrappingKey);
+		const unwrappedKey = await unwrapDataKey(wrappedKey, iv, wrappingKey);
+
+		const { ciphertext, iv: contentIv } = await encrypt(
+			dataKey,
+			"secret message",
+		);
+		const decrypted = await decrypt(unwrappedKey, ciphertext, contentIv);
+		expect(decrypted).toBe("secret message");
+	});
+
+	it("throws when unwrapping with wrong key", async () => {
+		const salt = generateSalt();
+		const wrappingKey = await deriveKeyFromPassword("password", salt);
+		const { cryptoKey: dataKey } = await generateKey();
+		const { cryptoKey: wrongKey } = await generateKey();
+
+		const { wrappedKey, iv } = await wrapKey(dataKey, wrappingKey);
+		await expect(unwrapDataKey(wrappedKey, iv, wrongKey)).rejects.toThrow();
+	});
+
+	it("throws when iv is tampered", async () => {
+		const salt = generateSalt();
+		const wrappingKey = await deriveKeyFromPassword("password", salt);
+		const { cryptoKey: dataKey } = await generateKey();
+
+		const { wrappedKey } = await wrapKey(dataKey, wrappingKey);
+		const tamperedIv = base64urlEncode(
+			crypto.getRandomValues(new Uint8Array(12)),
+		);
+		await expect(
+			unwrapDataKey(wrappedKey, tamperedIv, wrappingKey),
+		).rejects.toThrow();
 	});
 });

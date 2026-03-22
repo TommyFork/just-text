@@ -1,15 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+	createErrorResponse,
+	createJsonResponse,
+	logApiError,
+} from "@/lib/error";
 import { getClientIp } from "@/lib/ip";
 import { getPaste } from "@/lib/paste";
 import { checkReadRateLimit } from "@/lib/rate-limit";
-
-function logApiError(context: string, error: unknown): void {
-	if (error instanceof Error) {
-		console.error(`Error ${context}:`, error.message);
-	} else {
-		console.error(`Error ${context}:`, error);
-	}
-}
+import { isValidPasteId } from "@/lib/utils";
 
 export async function GET(
 	request: NextRequest,
@@ -17,45 +15,53 @@ export async function GET(
 ) {
 	try {
 		const { id } = await params;
+
+		// Validate paste ID
+		if (!isValidPasteId(id)) {
+			return createErrorResponse("Invalid paste ID", 400, "INVALID_ID", {
+				"Access-Control-Allow-Origin": "*",
+			});
+		}
+
 		const ip = await getClientIp();
 		const rateLimit = await checkReadRateLimit(ip);
 
 		if (!rateLimit.allowed) {
-			return NextResponse.json(
-				{ error: "Rate limit exceeded" },
+			return createErrorResponse(
+				"Rate limit exceeded",
+				429,
+				"RATE_LIMIT_EXCEEDED",
 				{
-					status: 429,
-					headers: {
-						"Retry-After": String(
-							rateLimit.resetAt - Math.floor(Date.now() / 1000),
-						),
-					},
+					"Retry-After": String(
+						rateLimit.resetAt - Math.floor(Date.now() / 1000),
+					),
+					"Access-Control-Allow-Origin": "*",
 				},
 			);
 		}
 
 		const paste = await getPaste(id);
 		if (!paste) {
-			return NextResponse.json(
-				{ error: "Paste not found or has expired" },
-				{ status: 404 },
+			return createErrorResponse(
+				"Paste not found or has expired",
+				404,
+				"NOT_FOUND",
+				{
+					"Access-Control-Allow-Origin": "*",
+				},
 			);
 		}
 
-		return NextResponse.json(paste, {
-			headers: {
-				// Ciphertext is opaque — safe to cache publicly.
-				// burn-after-read pastes must never be cached (consumed on first read).
-				"Cache-Control": paste.burnAfterRead
-					? "private, no-store"
-					: "public, max-age=300",
-			},
+		return createJsonResponse(paste, 200, {
+			"Cache-Control": paste.burnAfterRead
+				? "private, no-store"
+				: "public, max-age=300",
+			"Access-Control-Allow-Origin": "*",
 		});
 	} catch (error) {
 		logApiError("reading paste", error);
-		return NextResponse.json(
-			{ error: "Failed to read paste" },
-			{ status: 500 },
-		);
+		return createErrorResponse("Failed to read paste", 500, "INTERNAL_ERROR", {
+			"Access-Control-Allow-Origin": "*",
+		});
 	}
 }

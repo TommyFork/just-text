@@ -22,7 +22,7 @@ import {
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { formatBytes } from "@/lib/format";
-import { formatDate, getBaseUrl } from "@/lib/utils";
+import { formatDate } from "@/lib/utils";
 import { CopyButton } from "./copy-button";
 import { SharePopover } from "./share-popover";
 
@@ -36,34 +36,11 @@ interface PasteViewProps {
 		burnAfterRead: boolean;
 		viewCount: number;
 		sizeBytes: number;
+		passwordProtected?: boolean;
 	};
-	/** Sanitized HTML produced by the render worker */
 	html: string;
-	/** Decrypted plaintext — used for copy, fork, and line count */
 	plaintext: string;
-	/** Base64URL key from URL hash — used to construct share links */
-	keyB64url: string;
-}
-
-function buildCliCommand(
-	id: string,
-	keyB64url: string,
-	baseUrl: string,
-): string {
-	return `node -e "
-const {createDecipheriv}=require('node:crypto');
-const id='${id}',key=Buffer.from('${keyB64url}','base64url');
-fetch('${baseUrl}/api/paste/'+id)
-  .then(r=>r.json())
-  .then(({ciphertext,iv})=>{
-    const ivBuf=Buffer.from(iv,'base64url');
-    const ctBuf=Buffer.from(ciphertext,'base64url');
-    const tag=ctBuf.subarray(ctBuf.length-16);
-    const ct=ctBuf.subarray(0,ctBuf.length-16);
-    const d=createDecipheriv('aes-256-gcm',key,ivBuf);
-    d.setAuthTag(tag);
-    process.stdout.write(Buffer.concat([d.update(ct),d.final()]).toString('utf8'));
-  });"`;
+	keyB64url?: string;
 }
 
 function forkPaste(
@@ -93,9 +70,6 @@ export function PasteView({
 	keyB64url,
 }: PasteViewProps) {
 	const router = useRouter();
-	const rawUrl = `/text/${paste.id}`;
-	const baseUrl = getBaseUrl();
-	const cliCommand = buildCliCommand(paste.id, keyB64url, baseUrl);
 
 	const { lines, lineCount, gutterWidth } = useMemo(() => {
 		const lines = plaintext.split("\n");
@@ -137,18 +111,6 @@ export function PasteView({
 
 				{/* Desktop actions */}
 				<div className="hidden items-center gap-2 sm:flex">
-					{!paste.burnAfterRead && (
-						<a
-							href={rawUrl}
-							target="_blank"
-							rel="noopener noreferrer"
-							className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.04] px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
-							title="Open raw ciphertext"
-						>
-							<TextT size={13} />
-							Raw
-						</a>
-					)}
 					<CopyButton text={plaintext} label="Copy" variant="full" />
 					{!paste.burnAfterRead && (
 						<button
@@ -161,22 +123,7 @@ export function PasteView({
 							Fork
 						</button>
 					)}
-					{!paste.burnAfterRead && (
-						<CopyButton
-							text={cliCommand}
-							label={
-								<span className="flex items-center gap-1.5">
-									<Terminal size={13} />
-									CLI
-								</span>
-							}
-							variant="full"
-							title="Copy Node.js decrypt command"
-						/>
-					)}
-					{!paste.burnAfterRead && (
-						<SharePopover id={paste.id} keyB64url={keyB64url} />
-					)}
+					{!paste.burnAfterRead && <SharePopover id={paste.id} />}
 				</div>
 
 				{/* Mobile actions */}
@@ -199,15 +146,6 @@ export function PasteView({
 								sideOffset={4}
 							>
 								<div className="flex flex-col gap-0.5">
-									<a
-										href={rawUrl}
-										target="_blank"
-										rel="noopener noreferrer"
-										className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-muted-foreground transition-colors hover:bg-white/[0.06] hover:text-foreground"
-									>
-										<TextT size={14} />
-										Raw
-									</a>
 									<button
 										type="button"
 										onClick={() => forkPaste(paste, plaintext, router)}
@@ -216,22 +154,7 @@ export function PasteView({
 										<GitFork size={14} />
 										Fork
 									</button>
-									<CopyButton
-										text={cliCommand}
-										label={
-											<span className="flex items-center gap-2.5">
-												<Terminal size={14} />
-												CLI command
-											</span>
-										}
-										variant="full"
-										className="flex w-full items-center rounded-lg px-2.5 py-2 text-sm text-muted-foreground transition-colors hover:bg-white/[0.06] hover:text-foreground"
-									/>
-									<SharePopover
-										id={paste.id}
-										keyB64url={keyB64url}
-										mobileInline
-									/>
+									<SharePopover id={paste.id} mobileInline />
 								</div>
 							</PopoverContent>
 						</Popover>

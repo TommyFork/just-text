@@ -3,6 +3,12 @@
 import { Fire } from "@phosphor-icons/react";
 import { useState } from "react";
 import type { PasteFormat } from "@/lib/constants";
+import {
+	base64urlDecode,
+	base64urlEncode,
+	deriveKeyFromPassword,
+	unwrapDataKey,
+} from "@/lib/crypto";
 import type { RenderRequest, RenderResponse } from "@/workers/render.worker";
 import { PasteView } from "./paste-view";
 
@@ -21,11 +27,17 @@ interface FetchedPaste {
 	burnAfterRead: boolean;
 	viewCount: number;
 	sizeBytes: number;
+	passwordProtected: boolean;
+	key?: string;
+	salt?: string;
+	wrappedKey?: string;
+	wrapIv?: string;
 }
 
 type State =
 	| "confirm"
 	| "loading"
+	| { status: "password-required"; paste: FetchedPaste }
 	| {
 			status: "done";
 			paste: FetchedPaste;
@@ -38,19 +50,13 @@ type State =
 export function BurnGate({ id }: BurnGateProps) {
 	const [state, setState] = useState<State>("confirm");
 	const [error, setError] = useState<string | null>(null);
+	const [passwordInput, setPasswordInput] = useState("");
+	const [passwordError, setPasswordError] = useState<string | null>(null);
 
 	async function handleReveal() {
 		setState("loading");
 
-		const keyB64url = window.location.hash.slice(1);
-		if (!keyB64url) {
-			setError("No decryption key in URL — cannot reveal this paste.");
-			setState("error");
-			return;
-		}
-
 		try {
-			// Fetching from this endpoint atomically deletes the paste (burn-after-read).
 			const res = await fetch(`/api/paste/${id}`);
 			if (!res.ok) {
 				const data = await res.json().catch(() => ({}));
@@ -58,16 +64,72 @@ export function BurnGate({ id }: BurnGateProps) {
 			}
 			const paste: FetchedPaste = await res.json();
 
-			await new Promise<void>((resolve, reject) => {
-				const worker = new Worker(
+			if (paste.passwordProtected) {
+				setState({ status: "password-required", paste });
+				return;
+			}
+
+			await decryptPaste(paste, paste.key!);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "Something went wrong");
+			setState("error");
+		}
+	}
+
+	async function handlePasswordSubmit() {
+		if (typeof state !== "object" || state.status !== "password-required")
+			return;
+
+		setPasswordError(null);
+
+		try {
+			const saltBytes = base64urlDecode(state.paste.salt!);
+			const key = await deriveKeyFromPassword(passwordInput, saltBytes);
+			const dataKey = await unwrapDataKey(
+				state.paste.wrappedKey!,
+				state.paste.wrapIv!,
+				key,
+			);
+			const keyB64url = base64urlEncode(
+				await crypto.subtle.exportKey("raw", dataKey),
+			);
+
+			await decryptPaste(state.paste, keyB64url);
+		} catch {
+			setPasswordError("Incorrect password");
+		}
+	}
+
+	async function decryptPaste(paste: FetchedPaste, keyB64url: string) {
+		await new Promise<void>((resolve, reject) => {
+			let worker: Worker | null = null;
+			let cleanupTimeout: NodeJS.Timeout | null = null;
+
+			const cleanup = () => {
+				if (worker) {
+					worker.terminate();
+					worker = null;
+				}
+				if (cleanupTimeout) {
+					clearTimeout(cleanupTimeout);
+					cleanupTimeout = null;
+				}
+			};
+
+			try {
+				worker = new Worker(
 					new URL("../workers/render.worker.ts", import.meta.url),
+					{ type: "module" },
 				);
 
+				cleanupTimeout = setTimeout(() => {
+					cleanup();
+					reject(new Error("Worker timeout"));
+				}, 10000);
+
 				worker.onmessage = (event: MessageEvent<RenderResponse>) => {
-					worker.terminate();
+					cleanup();
 					if (event.data.type === "success") {
-						// Paste is now consumed — strip the key from the URL bar.
-						// The key is stored in state so PasteView can still render it.
 						history.replaceState(null, "", window.location.pathname);
 						setState({
 							status: "done",
@@ -83,7 +145,7 @@ export function BurnGate({ id }: BurnGateProps) {
 				};
 
 				worker.onerror = (err) => {
-					worker.terminate();
+					cleanup();
 					reject(new Error(err.message || "Worker error"));
 				};
 
@@ -96,11 +158,11 @@ export function BurnGate({ id }: BurnGateProps) {
 					language: paste.language,
 				};
 				worker.postMessage(req);
-			});
-		} catch (err) {
-			setError(err instanceof Error ? err.message : "Something went wrong");
-			setState("error");
-		}
+			} catch (err) {
+				cleanup();
+				throw err;
+			}
+		});
 	}
 
 	if (typeof state === "object" && state.status === "done") {
@@ -145,6 +207,36 @@ export function BurnGate({ id }: BurnGateProps) {
 
 					{state === "error" ? (
 						<p className="text-sm text-destructive">{error}</p>
+					) : typeof state === "object" &&
+						state.status === "password-required" ? (
+						<div className="flex flex-col items-center gap-2">
+							<p className="text-xs text-muted-foreground/60">
+								This paste is password-protected
+							</p>
+							<input
+								type="password"
+								value={passwordInput}
+								onChange={(e) => setPasswordInput(e.target.value)}
+								placeholder="Enter password..."
+								className="w-full max-w-xs rounded-lg border border-white/[0.08] bg-white/[0.04] px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/25 focus:border-orange-500/40 focus:outline-none focus:ring-1 focus:ring-orange-500/20"
+								autoFocus
+							/>
+							{passwordError && (
+								<p className="text-xs text-destructive">{passwordError}</p>
+							)}
+							<button
+								type="button"
+								onClick={handlePasswordSubmit}
+								disabled={
+									!passwordInput ||
+									(typeof state === "object" &&
+										state.status !== "password-required")
+								}
+								className="mt-1 inline-flex h-9 items-center gap-2 rounded-full border border-orange-500/30 bg-orange-500/10 px-5 text-sm font-medium text-orange-400 transition-all hover:bg-orange-500/20 disabled:pointer-events-none disabled:opacity-50"
+							>
+								Decrypt & View
+							</button>
+						</div>
 					) : (
 						<button
 							type="button"
