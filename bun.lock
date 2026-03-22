@@ -13,6 +13,7 @@
         "clsx": "^2.1.1",
         "date-fns": "^4.1.0",
         "ioredis": "^5.10.0",
+        "marked": "^17.0.5",
         "nanoid": "^5.1.7",
         "next": "16.1.6",
         "radix-ui": "^1.4.3",
@@ -944,6 +945,8 @@
     "make-dir": ["make-dir@4.0.0", "", { "dependencies": { "semver": "^7.5.3" } }, ""],
 
     "markdown-table": ["markdown-table@3.0.4", "", {}, ""],
+
+    "marked": ["marked@17.0.5", "", { "bin": { "marked": "bin/marked.js" } }, "sha512-6hLvc0/JEbRjRgzI6wnT2P1XuM1/RrrDEX0kPt0N7jGm1133g6X7DlxFasUIx+72aKAr904GTxhSLDrd5DIlZg=="],
 
     "math-intrinsics": ["math-intrinsics@1.1.0", "", {}, ""],
 
