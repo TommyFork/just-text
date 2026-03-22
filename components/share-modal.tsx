@@ -63,18 +63,18 @@ export function ShareModal({
 					</div>
 
 					<TooltipProvider>
-						<div className="flex items-center gap-1.5 text-xs text-orange-400/50">
-							<Lock size={11} weight="fill" />
-							<span>end-to-end encrypted</span>
-							{passwordProtected && (
+						{passwordProtected && (
+							<div className="flex items-center gap-1.5 text-xs text-orange-400/50">
+								<Lock size={11} weight="fill" />
+								<span>end-to-end encrypted</span>
 								<Tooltip>
 									<TooltipTrigger asChild>
 										<Info size={11} className="cursor-default" />
 									</TooltipTrigger>
 									<TooltipContent>Share password separately</TooltipContent>
 								</Tooltip>
-							)}
-						</div>
+							</div>
+						)}
 					</TooltipProvider>
 				</div>
 
